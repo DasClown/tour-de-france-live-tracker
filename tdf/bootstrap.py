@@ -13,6 +13,7 @@ Verifiziert am 2026-07-05:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -140,17 +141,38 @@ async def bootstrap_state(state: st.State, session: aiohttp.ClientSession, *,
     if next_stage is None:
         next_stage = stage + 1
 
-    # 1) GC – das Wichtigste, Fehler hier sind fatal.
+    # 1) GC der aktuellen Etappe (Live-Ergebnis, type=itg).
+    #    Bleibt oft leer, solange ASO keine aktuelle GC published (typisch
+    #    während des Rennens). Schreibt in current_stage_gc.
     try:
-        state.base_gc = await fetch_current_gc(session, year, stage)
+        state.current_stage_gc = await fetch_current_gc(session, year, stage)
+        if state.current_stage_gc:
+            log.info("Bootstrap: aktuelle Etappen-GC geladen (%d Fahrer)",
+                     len(state.current_stage_gc))
     except (aiohttp.ClientError, ValueError) as e:
-        log.error("GC-Bootstrap fehlgeschlagen: %s", e)
+        log.info("Aktuelle Etappen-GC nicht verfügbar (%s) — erwarte Vortages-GC", e)
+
+    # 1b) GC der VORHERIGEN Etappe (offiziell gültige GC vom Vortag).
+    #     Das ist die Quelle, die zählt, solange die aktuelle Etappe läuft.
+    #     Lädt auch dann, wenn current_stage_gc oben erfolgreich war — dann
+    #     hat current Vorrang, aber prev bleibt für die UI-Spalte „Vortag".
+    if stage > 1:
+        try:
+            state.prev_stage_gc = await fetch_current_gc(session, year, stage - 1)
+            if state.prev_stage_gc:
+                log.info("Bootstrap: Vortages-GC (Etappe %d) geladen (%d Fahrer)",
+                         stage - 1, len(state.prev_stage_gc))
+        except (aiohttp.ClientError, ValueError) as e:
+            log.warning("Vortages-GC nicht ladbar: %s", e)
 
     # 2) Jerseys.
+    # WICHTIG: asyncio.TimeoutError ist NICHT Unterklasse von aiohttp.ClientError
+    # und würde sonst durchbrechen und den ganzen Bootstrap killen. Wir fangen
+    # alle drei Exception-Typen explizit ab.
     try:
         jerseys = await fetch_jerseys(session, year, next_stage)
         state.jerseys = jerseys
-    except (aiohttp.ClientError, ValueError) as e:
+    except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as e:
         log.warning("Jerseys-Bootstrap fehlgeschlagen: %s", e)
 
     # 3) Letzte Telemetrie (als Startpunkt; SSE übernimmt danach).
@@ -158,13 +180,13 @@ async def bootstrap_state(state: st.State, session: aiohttp.ClientSession, *,
         snap = await fetch_last_telemetry(session, year)
         if snap:
             st.apply_telemetry(state, snap, from_bootstrap=True)
-    except (aiohttp.ClientError, ValueError) as e:
+    except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as e:
         log.warning("Telemetrie-Bootstrap fehlgeschlagen: %s", e)
 
     # 4) Pack (optional, SSE liefert ohnehin bald ein Update).
     try:
         state.groups = await fetch_pack(session, year, stage)
-    except (aiohttp.ClientError, ValueError) as e:
+    except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as e:
         log.warning("Pack-Bootstrap fehlgeschlagen: %s", e)
 
     # Virtual GC einmal initial berechnen.

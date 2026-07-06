@@ -85,8 +85,10 @@ async def consume_sse(app: web.Application) -> None:
             async with session.get(cfg.LIVE_STREAM, headers=cfg.SSE_HEADERS,
                                    timeout=timeout) as resp:
                 resp.raise_for_status()
-                log.info("SSE verbunden (HTTP %d, sock_read=%.0fs)",
-                         resp.status, sse_read_timeout)
+                sock_read_str = (f"{sse_read_timeout:.0f}s"
+                                 if sse_read_timeout is not None else "∞")
+                log.info("SSE verbunden (HTTP %d, sock_read=%s)",
+                         resp.status, sock_read_str)
                 backoff = 1
                 # ⚠️ WICHTIG: aiohttp liefert resp.content als Byte-Stream in
                 # kleinen Chunks (oft nur 9-70 Bytes), NICHT als Zeilen.
@@ -475,10 +477,22 @@ async def handle_ws(request: web.Request) -> web.WebSocketResponse:
 
 
 async def broadcast(state: st.State) -> None:
-    """Listener: schreibt Trail (immer) und broadcastet an WS-Clients (wenn welche)."""
+    """Listener: schreibt Trail (immer) und broadcastet an WS-Clients (wenn welche).
+
+    WIRD vom SSE-Consumer innerhalb von state.lock aufgerufen (via
+    state.notify()). Daher dürfen wir das Lock hier NICHT erneut nehmen —
+    asyncio.Lock ist nicht reentrant, das würde deadlocken. Wenn das Lock
+    schon gehalten wird (was beim Aufruf aus consume_sse der Fall ist),
+    rufen wir to_snapshot direkt auf.
+    """
     app = state._app  # type: ignore[attr-defined]
-    async with state.lock:
+    if state.lock.locked():
+        # Lock schon gehalten (wir wurden aus einem Lock-Kontext aufgerufen):
+        # Snapshot direkt nehmen, ohne erneut zu locken.
         snap = st.to_snapshot(state)
+    else:
+        async with state.lock:
+            snap = st.to_snapshot(state)
 
     # 1) Trail mitschneiden (unabhängig von WS-Clients, throttelt).
     trail: trail_mod.JsonlTrail | None = app.get("trail")

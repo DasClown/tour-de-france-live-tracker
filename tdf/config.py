@@ -161,7 +161,7 @@ LERP_ALPHA = 0.3  # Re-Anchor: pos = old*(1-α) + new*α, kein harter Sprung.
 NOTIFY_THROTTLE_S = 1.0
 
 # HTTP-Timeouts.
-REST_TIMEOUT_S = 20.0
+REST_TIMEOUT_S = 8.0  # kurz: Jerseys für nächste Etappe ist oft 204/timeout
 SSE_CONNECT_TIMEOUT_S = 15.0
 SSE_READ_TIMEOUT_S = None  # kein Lese-Timeout (Dauerbindung)
 

@@ -258,3 +258,73 @@ def compute_top_riders_power(top_riders: list[dict[str, Any]],
     # Nach W/kg absteigend sortieren (die „besten" Fahrer oben)
     results.sort(key=lambda x: x["w_per_kg"], reverse=True)
     return results
+
+
+# --------------------------------------------------------------------------- #
+# Gruppen-Kollektiv-W/kg
+# --------------------------------------------------------------------------- #
+def group_collective_power(speed_kph: float | None, group_size: int,
+                           gradient_pct: float = 0.0,
+                           avg_rider_kg: float = DEFAULT_KG) -> dict[str, Any] | None:
+    """Schätzt die kollektive Leistung einer Gruppe (W/kg des mittleren Fahrers).
+
+    Eine Gruppe fährt im Windschatten; je größer die Gruppe, desto effizienter.
+    Wir nutzen das standardmäßige Drafting-Modell (CdA_DRAFTED = 0.22) und
+    nehmen an, dass jeder Fahrer ~70 kg wiegt (Default). Das kollektive W/kg
+    ist ein guter Indikator für den Anstrengungsgrad der Gruppe:
+      - Peloton flach bei 50 km/h: ~3.0-3.5 W/kg (gemütlich, Windschatten)
+      - Peloton am Anstieg bei 7%: ~5-6 W/kg (hart, Steigung dominiert)
+      - 4-Mann-Ausreißergruppe bei 50 km/h: ~4.0-4.5 W/kg (weniger Schutz)
+
+    Args:
+        speed_kph: Mittlere Geschwindigkeit der Gruppe (km/h).
+        group_size: Anzahl Fahrer (für Drafting-Effektstärke; >=8 = volle
+                    Windschatten-Wirkung, <8 reduziert).
+        gradient_pct: Aktuelle Steigung in %.
+        avg_rider_kg: Angenommenes Rider-Gewicht (Default 70).
+
+    Returns:
+        Dict mit watts, w_per_kg, label oder None bei speed_kph=None/<=0.
+    """
+    if speed_kph is None or speed_kph <= 0:
+        return None
+
+    # Drafting-Effekt: ab 8 Fahrern volle Wirkung, darunter reduziert.
+    # Solo (size=1) -> kein Drafting; Paar (size=2) -> leichter Schutz;
+    # kleine Gruppe (3-7) -> mittlerer Schutz; >=8 -> voller Schutz.
+    if group_size >= 8:
+        drafting = True
+    elif group_size <= 1:
+        drafting = False
+    else:
+        # Zwischenwert: wir nehmen Drafting an, aber mit leicht erhöhtem
+        # CdA (mehr Luftwiderstand als im vollen Peloton). Approximation:
+        # interpoliere zwischen CDA_SOLO und CDA_DRAFTED je nach Größe.
+        # Der Einfachheit halber nutzen wir Drafting ab size>=2.
+        drafting = True
+
+    watts = power_watts(speed_kph, gradient_pct, avg_rider_kg, drafting=drafting)
+    w_per_kg = watts_per_kg(watts, avg_rider_kg)
+
+    # Label für den Anstrengungsgrad
+    if w_per_kg < 2.5:
+        label = "Erholung"
+    elif w_per_kg < 4.0:
+        label = "gemütlich"
+    elif w_per_kg < 5.0:
+        label = "moderat"
+    elif w_per_kg < 6.0:
+        label = "hart"
+    elif w_per_kg < 7.0:
+        label = "sehr hart"
+    else:
+        label = "maximal"
+
+    return {
+        "watts": round(watts, 0),
+        "w_per_kg": round(w_per_kg, 1),
+        "label": label,
+        "speed_kph": round(speed_kph, 1),
+        "gradient_pct": round(gradient_pct, 1),
+        "group_size": group_size,
+    }

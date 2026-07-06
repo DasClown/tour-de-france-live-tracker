@@ -113,6 +113,17 @@ class State:
     # Offizielle Ranglisten
     base_gc: list[RankEntry] = field(default_factory=list)   # type=itg (Start-Basis)
     stage_result: list[RankEntry] = field(default_factory=list)  # type=ete
+    # GC-Carry-Forward: GC der letzten abgeschlossenen Etappe (stage-1),
+    # geladen beim Bootstrap. Diese GC ist die offiziell gültige, solange
+    # die aktuelle Etappe noch läuft (ASO published die neue GC erst nach
+    # Etappenende oder mit erster Bergankunft). Sie ist die Quelle für
+    # Top-10, Jerseys-Cross-Reference und W/kg-Scope, auch wenn die
+    # aktuelle Etappe noch keine itg-Daten liefert.
+    prev_stage_gc: list[RankEntry] = field(default_factory=list)
+    # Live-Ergebnis der aktuellen Etappe (type=itg von rankingTypeArrival
+    # der aktuellen Etappe). Bleibt leer bis ASO sie published; sobald sie
+    # kommt, überschreibt sie die Anzeige der GC live.
+    current_stage_gc: list[RankEntry] = field(default_factory=list)
     jerseys: dict[str, int] = field(default_factory=dict)    # code (Y/G/P/W) -> bib
     withdrawals: set[int] = field(default_factory=set)
 
@@ -429,7 +440,10 @@ def dispatch(msg: dict, state: State, *, year: int, stage: int | None,
         rtype = data.get("type")
         entries = parse_rankings(data)
         if rtype == cfg.TYPE_GC and entries:
-            state.base_gc = entries  # offizielle GC aktualisiert sich live
+            # Live-GC der aktuellen Etappe: in current_stage_gc schreiben
+            # (höchste Priorität in recompute_virtual_gc). base_gc wird dort
+            # automatisch synchron gehalten.
+            state.current_stage_gc = entries
         elif rtype == cfg.TYPE_STAGE and entries:
             state.stage_result = entries
         recompute_virtual_gc(state)
@@ -478,11 +492,25 @@ def recompute_virtual_gc(state: State) -> None:
     abreißen. Diese Zusatz-Lücke verändert aber NICHT die Grundsortierung
     einer etablierten GC – sie wirkt sich erst aus, wenn Gruppen auseinander-
     reißen. Defensiv: fehlen Gruppen-Daten, bleibt es exakt beim itg-Ranking.
+
+    GC-Quellen-Priorität (Carry-Forward):
+      1. current_stage_gc  — Live-GC der aktuellen Etappe, sobald ASO sie
+         published. Bleibt leer bis dahin.
+      2. prev_stage_gc     — GC der letzten abgeschlossenen Etappe (Vortag).
+         Das ist die offiziell gültige GC, solange die aktuelle Etappe läuft.
+      3. base_gc           — Legacy-Feld (früher einzige Quelle). Fallback.
     """
-    if not state.base_gc:
+    # GC-Quelle wählen: current → prev → base → leer.
+    gc_source = (state.current_stage_gc or state.prev_stage_gc
+                 or state.base_gc)
+    if not gc_source:
         state.virtual_gc = []
         state.top_n = []
         return
+    # base_gc bleibt aus Kompatibilität synchron zur gewählten Quelle,
+    # damit alter Code der base_gc liest nicht ins Leere greift.
+    if gc_source is not state.base_gc:
+        state.base_gc = gc_source
 
     # Gruppierung Bib -> Gruppe, plus Gap des Gruppenführers (kleinster Gap).
     bib_to_group: dict[int, GroupInfo] = {}
@@ -498,7 +526,7 @@ def recompute_virtual_gc(state: State) -> None:
     # Sortierschlüssel: primär itg-position (offiziell), sekundär bib.
     # Die Live-Lücke wird NUR für die Anzeige aufgeschlagen, nicht für Sort.
     virtual: list[RankEntry] = []
-    for e in state.base_gc:
+    for e in gc_source:
         rel = e.relative_seconds if e.relative_seconds is not None else 0
         g = bib_to_group.get(e.bib)
         live_extra = 0
@@ -561,12 +589,30 @@ def to_snapshot(state: State, *, top_limit: int | None = None,
     if top_limit:
         gc = gc[:top_limit]
 
+    # --- Live-Gradient (für W/kg und kollektive Gruppenleistung) ---
+    # Früh berechnen, damit alle Feature-Blöcke (Predictions, Map, Power,
+    # Group-JSON) darauf zugreifen können.
+    current_gradient = 0.0
+    if state.profile_points and state.groups:
+        lead = state.groups[0]
+        lead_km = getattr(lead, "remaining_km", None)
+        try:
+            total_km = (state.profile_points[-1].get("km_done", 0.0)
+                        if state.profile_points else 0.0)
+            if lead_km is not None and total_km > 0:
+                current_km = max(0.0, total_km - float(lead_km))
+                g = power_mod.gradient_at_km(state.profile_points, current_km)
+                if g is not None:
+                    current_gradient = g
+        except (TypeError, ValueError, IndexError):
+            pass
+
     # Feature 1: Restzeit-Vorhersage
     top_riders_data = [
         state.telemetry.riders.get(bib, {}) for bib in state.top_n
     ]
     predictions = prediction_mod.compute_predictions(
-        groups=[_group_json(g, state.meta) for g in state.groups],
+        groups=[_group_json(g, state.meta, current_gradient) for g in state.groups],
         top_riders=top_riders_data,
     )
 
@@ -582,46 +628,24 @@ def to_snapshot(state: State, *, top_limit: int | None = None,
 
     # Feature 5: Karten-Koordinaten
     map_data = map_data_mod.build_map_data(
-        groups=[_group_json(g, state.meta) for g in state.groups],
+        groups=[_group_json(g, state.meta, current_gradient) for g in state.groups],
         top_riders=top_riders_data,
         checkpoints=state.checkpoints,
         classifications=classifications,
     )
 
-    # --- Technische Features (6-9) ---
-    # Live-Gradient aus dem Profil anhand der aktuellen Spitzengruppe.
-    # Wenn kein Profil vorhanden -> 0.0 (Flachland-Annahme).
-    current_gradient = 0.0
-    if state.profile_points and state.groups:
-        # Aktuelle km-Position = completedDistance der Spitzengruppe.
-        lead = state.groups[0]
-        lead_km = getattr(lead, "remaining_km", None)
-        # Wir brauchen km_done, aber GroupInfo hat remaining_km.
-        # Approximation: total_km - remaining_km = km_done.
-        # Ohne total_km -> wir nehmen das Profilende als Referenz und
-        # rechnen vom Ende her. Einfacher: Wir bitten den Server, die
-        # korrekte km-Position via app["profile"] zu setzen; hier reicht
-        # der Fallback, dass wir die Spitzengruppe über remaining_km
-        # im Profil suchen.
-        try:
-            total_km = (state.profile_points[-1].get("km_done", 0.0)
-                        if state.profile_points else 0.0)
-            if lead_km is not None and total_km > 0:
-                current_km = max(0.0, total_km - float(lead_km))
-                g = power_mod.gradient_at_km(state.profile_points, current_km)
-                if g is not None:
-                    current_gradient = g
-        except (TypeError, ValueError, IndexError):
-            pass
-
-    # Feature 6: Power (Watt + W/kg) für die Top-N-Rider.
+    # Feature 6: Power (Watt + W/kg) für ALLE Rider mit Telemetrie.
+    # Früher nur für top_n (die leer war, solange ASO keine GC liefert);
+    # jetzt für alle ~174 Rider, die in telemetry.riders stehen. Damit ist
+    # das W/kg-Leaderboard sofort gefüllt, sobald die erste Telemetrie kommt.
     # Peloton-Bibs = alle Bibs der größten Gruppe (für Drafting-Savings).
     peloton_bibs: set[int] = set()
     if state.groups:
         biggest = max(state.groups, key=lambda x: x.size)
         peloton_bibs = set(biggest.bibs)
+    all_riders_data = list(state.telemetry.riders.values())
     power_data = power_mod.compute_top_riders_power(
-        top_riders_data, gradient_pct=current_gradient,
+        all_riders_data, gradient_pct=current_gradient,
         peloton_bibs=peloton_bibs,
     )
 
@@ -679,7 +703,15 @@ def to_snapshot(state: State, *, top_limit: int | None = None,
         "telemetry_ts": ts,
         "server_now": now,
         "gc": [_entry_json(e, state.meta) for e in gc],
-        "groups": [_group_json(g, state.meta) for g in state.groups],
+        # Zwei GC-Quellen für das UI (Two-Column-Anzeige).
+        # prev_stage_gc = offizielle GC vom Vortag (zählt aktuell).
+        # current_stage_gc = Live-GC der aktuellen Etappe (leer bis ASO
+        # sie published). gc oben = die jeweils priorisierte Quelle.
+        "prev_stage_gc": [_entry_json(e, state.meta)
+                          for e in state.prev_stage_gc],
+        "current_stage_gc": [_entry_json(e, state.meta)
+                             for e in state.current_stage_gc],
+        "groups": [_group_json(g, state.meta, current_gradient) for g in state.groups],
         "top_n": [_top_rider_json(state, b) for b in state.top_n],
         "jerseys": {code: _jersey_json(state, code, bib)
                     for code, bib in state.jerseys.items()},
@@ -699,12 +731,102 @@ def to_snapshot(state: State, *, top_limit: int | None = None,
         # Technische Features (6-9)
         "power": {
             "gradient_pct": round(current_gradient, 1),
-            "riders": power_data[:10],  # Top 10 nach W/kg
+            "riders": power_data[:20],  # Top 20 nach W/kg
+            "total_with_power": len(power_data),  # wie viele Rider überhaupt kph haben
         },
         "time_cut": time_cut,
         "breakaway_survival": survival,
+        # Pace-Kontext (Feature A4): abgeleitete Insights statt roher Zahlen.
+        "pace_context": _compute_pace_context(state),
     }
     return result
+
+
+def _compute_pace_context(state: State) -> dict[str, Any]:
+    """Leitet Pace-Kontext ab: Durchschnittsgeschwindigkeit, Trend und
+    Verfolgungsdruck. Diese Werte sind Eigenleistung des Tools — ASO liefert
+    nur rohe kph, wir interpretieren sie.
+
+    Trend: aus gap_history (Gruppen-Speed über Zeit). Wenn dort die letzten
+    beiden Messpunkte schnellere Spitzengruppe zeigen als frühere -> „beschleunigend".
+
+    Pressure: aus Differenz Spitzengruppe vs Peloton-Speed und Anzahl Gruppen.
+    Hoher Pressure = Peloton fährt deutlich schneller als Spitze (Verfolgung).
+    """
+    if not state.groups:
+        return {"available": False}
+
+    lead = state.groups[0]
+    lead_speed = getattr(lead, "speed", None)
+
+    # Peloton = größte Gruppe
+    peloton = max(state.groups, key=lambda g: g.size)
+    peloton_speed = getattr(peloton, "speed", None)
+
+    # Avg-Speed über alle Gruppen (gewichtet nach Größe)
+    total_riders = sum(g.size for g in state.groups if g.size < 200)
+    if total_riders > 0 and lead_speed:
+        weighted = sum((g.speed or 0) * g.size for g in state.groups
+                       if g.speed and g.size < 200)
+        avg_speed = weighted / total_riders
+    else:
+        avg_speed = lead_speed
+
+    # Trend aus gap_history (Speed der Spitzengruppe über Zeit)
+    trend = "stabil"
+    pressure = "unbekannt"
+    pressure_level = "low"
+    try:
+        hist = state.gap_history.get_history()
+        series = hist.get("series", [])
+        if len(series) >= 2 and lead_speed:
+            # Vergleiche Gruppen-Speed der letzten vs vorletzten Messung
+            last_groups = series[-1].get("groups", [])
+            prev_groups = series[-2].get("groups", [])
+            if last_groups and prev_groups:
+                # „gap_s" der Spitze (order 0) als Proxy; niedriger gap =
+                # Spitze eingeholt = hoher Druck.
+                last_lead_gap = next((g.get("gap_s") for g in last_groups
+                                      if g.get("order") == 0), None)
+                prev_lead_gap = next((g.get("gap_s") for g in prev_groups
+                                      if g.get("order") == 0), None)
+                if last_lead_gap is not None and prev_lead_gap is not None:
+                    delta = (prev_lead_gap or 0) - (last_lead_gap or 0)
+                    if delta > 5:
+                        trend = "Spitze eingeholt"
+                        pressure_level = "high"
+                    elif delta < -5:
+                        trend = "Spitze rennt weg"
+                        pressure_level = "low"
+    except Exception:
+        pass
+
+    # Pressure aus Speed-Differenz (Peloton schneller als Spitze = Jagd)
+    if peloton_speed and lead_speed and peloton_speed > 0:
+        diff = peloton_speed - lead_speed
+        if diff > 3:
+            pressure = f"Peloton +{diff:.1f} km/h — Verfolgungsdruck"
+            pressure_level = "high"
+        elif diff > 0:
+            pressure = f"Peloton +{diff:.1f} km/h — moderate Jagd"
+            pressure_level = "medium" if pressure_level != "high" else "high"
+        elif diff < -3:
+            pressure = f"Spitze {abs(diff):.1f} km/h schneller — rennt weg"
+            pressure_level = "low"
+        else:
+            pressure = "gleich schnell — wartet ab"
+            pressure_level = "medium"
+
+    return {
+        "available": True,
+        "avg_speed_kph": round(avg_speed, 1) if avg_speed else None,
+        "lead_speed_kph": round(lead_speed, 1) if lead_speed else None,
+        "peloton_speed_kph": round(peloton_speed, 1) if peloton_speed else None,
+        "trend": trend,
+        "pressure": pressure,
+        "pressure_level": pressure_level,
+        "n_groups": len(state.groups),
+    }
 
 
 def _entry_json(e: RankEntry, meta: dict[int, dict[str, Any]]) -> dict:
@@ -718,15 +840,23 @@ def _entry_json(e: RankEntry, meta: dict[int, dict[str, Any]]) -> dict:
     }
 
 
-def _group_json(g: GroupInfo, meta: dict[int, dict[str, Any]]) -> dict:
+def _group_json(g: GroupInfo, meta: dict[int, dict[str, Any]],
+                gradient_pct: float = 0.0) -> dict:
     names = [name_of(meta, b).split("  (")[0] for b in g.bibs[:6] if b in meta]
-    return {
+    out = {
         "order": g.order, "name": g.name, "size": g.size,
         "speed_kph": g.speed, "remaining_km": g.remaining_km,
         "gap_s": g.gap_seconds, "lat": g.lat, "lon": g.lon,
         "bibs": g.bibs, "sample_names": names,
         "extra": max(0, len(g.bibs) - 6),
     }
+    # Kollektive Gruppen-W/kg (Feature A3) — zeigt Anstrengungsgrad der
+    # Gruppe: „Peloton moderat bei 3.5 W/kg" vs „Ausreißer hart bei 5.2 W/kg".
+    coll = power_mod.group_collective_power(
+        g.speed, g.size, gradient_pct=gradient_pct)
+    if coll is not None:
+        out["collective_power"] = coll
+    return out
 
 
 def _top_rider_json(state: State, bib: int) -> dict:
