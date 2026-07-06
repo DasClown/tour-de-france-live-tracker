@@ -3,182 +3,149 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0c10">
+  <meta name="theme-color" content="#1a1a1a">
   <title>TdF Live – Tracker</title>
   <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        crossorigin="">
 </head>
 <body>
-  <!-- Partikel-Hintergrund Canvas -->
-  <canvas id="particle-canvas"></canvas>
 
-  <!-- Topbar -->
-  <header class="topbar">
-    <div class="title">
-      <span class="logo">🚴</span>
+  <!-- HEADER -->
+  <header class="hdr">
+    <div class="hdr__title">
+      <span class="hdr__logo">🚴</span>
       <span id="stage-label">Tour de France</span>
     </div>
-    <div class="status" id="sse-indicator">
+    <div class="hdr__status">
       <span id="status-pill" class="pill pill--idle">…</span>
-      <span id="freshness" class="freshness"></span>
-      <span id="sse-dot" class="sse-dot sse-dot--off" title="Verbindung">⬤</span>
+      <span id="freshness" class="hdr__freshness"></span>
     </div>
   </header>
 
-  <!-- Status Quo Header – immer sichtbar -->
-  <div class="status-quo glass" id="status-quo">
-    <div class="sq-row sq-row--main">
-      <div class="sq-stage">
-        <span class="sq-label">Etappe</span>
-        <span class="sq-value" id="sq-stage">–</span>
-      </div>
-      <div class="sq-status-badge" id="sq-status-badge">
-        <span class="sq-label">Status</span>
-        <span class="sq-pill" id="sq-pill">…</span>
-      </div>
-      <div class="sq-freshness">
-        <span class="sq-label">Letztes Update</span>
-        <span class="sq-value" id="sq-freshness">–</span>
-      </div>
-      <div class="sq-next">
-        <span class="sq-label">Nächste Etappe</span>
-        <span class="sq-value" id="sq-next">–</span>
-      </div>
-    </div>
-    <div class="sq-row sq-row--stats" id="sq-stats">
-      <div class="sq-stat glass sq-stat--rider">
-        <span class="sq-stat__value" id="sq-rider-count">0</span>
-        <span class="sq-stat__label">Fahrer im Feld</span>
-      </div>
-      <div class="sq-stat glass sq-stat--groups">
-        <span class="sq-stat__value" id="sq-group-count">0</span>
-        <span class="sq-stat__label">Gruppen</span>
-      </div>
-      <div class="sq-stat glass sq-stat--gc">
-        <span class="sq-stat__value" id="sq-gc-leader">–</span>
-        <span class="sq-stat__label">GC-Führer</span>
-      </div>
-      <div class="sq-stat glass sq-stat--gap">
-        <span class="sq-stat__value" id="sq-gc-gap">–</span>
-        <span class="sq-stat__label">Vorsprung</span>
-      </div>
-    </div>
+  <!-- PACE CONTEXT BANNER -->
+  <div class="pace-banner" id="pace-banner" hidden>
+    <span class="pace-banner__icon" id="pace-icon">⚡</span>
+    <span class="pace-banner__text" id="pace-text">–</span>
   </div>
 
-  <!-- Control bar -->
+  <!-- KPI LEISTE -->
+  <div class="kpis" id="kpis">
+    <div class="kpi"><span class="kpi__val" id="kpi-starters">–</span><span class="kpi__lbl">Starter</span></div>
+    <div class="kpi"><span class="kpi__val" id="kpi-active">–</span><span class="kpi__lbl">Aktiv</span></div>
+    <div class="kpi"><span class="kpi__val kpi__val--red" id="kpi-dnf">–</span><span class="kpi__lbl">DNF</span></div>
+    <div class="kpi"><span class="kpi__val" id="kpi-groups">–</span><span class="kpi__lbl">Gruppen</span></div>
+    <div class="kpi"><span class="kpi__val" id="kpi-speed">–</span><span class="kpi__lbl">km/h Ø</span></div>
+  </div>
+
+  <!-- CONTROL bar (nur wenn systemd verfügbar) -->
   <div class="ctrlbar" id="ctrlbar" hidden>
-    <button class="btn btn--ok"    data-action="restart" title="Dienst neu starten">↻ Restart</button>
-    <button class="btn btn--warn"  data-action="stop"    title="Dienst anhalten">■ Stop</button>
-    <button class="btn btn--ok"    data-action="start"   title="Dienst starten">▶ Start</button>
-    <span class="ctrl-state" id="ctrl-state">● Zustand …</span>
-    <a class="btn btn--ghost" href="/api/trail?n=20" target="_blank" rel="noopener">Trail</a>
+    <button class="btn btn--ok" data-action="restart">↻ Restart</button>
+    <button class="btn btn--warn" data-action="stop">■ Stop</button>
+    <button class="btn btn--ok" data-action="start">▶ Start</button>
+    <span class="ctrlbar__state" id="ctrl-state">● …</span>
   </div>
 
-  <!-- Auth bar -->
+  <!-- AUTH bar -->
   <div class="authbar" id="authbar" hidden>
-    <span>Token eingeben:</span>
-    <input id="token-input" type="password" placeholder="TDF_TOKEN"
-           autocomplete="off">
+    <input id="token-input" type="password" placeholder="TDF_TOKEN" autocomplete="off">
     <button class="btn btn--ghost" id="token-save">Speichern</button>
   </div>
 
-  <main class="layout">
-    <section class="map-col">
-      <div id="map" role="img" aria-label="Live-Karte"></div>
+  <!-- MAIN GRID -->
+  <main class="grid">
+
+    <!-- LEFT: GC Two-Column -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2 class="panel__title">Gesamtwertung</h2>
+        <span class="panel__sub" id="gc-source">–</span>
+      </div>
+      <div class="gc-cols">
+        <div class="gc-col">
+          <div class="gc-col__head">Vortag <span class="muted" id="gc-prev-stage">–</span></div>
+          <table class="tbl tbl--gc" id="gc-prev-table">
+            <thead><tr><th>#</th><th>Name</th><th>Team</th><th class="num">Δ</th></tr></thead>
+            <tbody id="gc-prev-body"></tbody>
+          </table>
+        </div>
+        <div class="gc-col">
+          <div class="gc-col__head">Live heute <span class="muted" id="gc-live-stage">–</span></div>
+          <table class="tbl tbl--gc" id="gc-live-table">
+            <thead><tr><th>#</th><th>Name</th><th>Team</th><th class="num">Δ</th></tr></thead>
+            <tbody id="gc-live-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Top-Favoriten (vormals Cards) -->
+      <div class="panel__sub" id="topn-info"></div>
     </section>
 
-    <section class="data-col">
-
-      <!-- Restzeit-Anzeige -->
-      <div class="restzeit glass" id="restzeit" hidden>
-        <div class="restzeit__inner">
-          <span class="restzeit__label">Geschätzte Zielankunft</span>
-          <span class="restzeit__value" id="restzeit-value">–</span>
-          <span class="restzeit__sub" id="restzeit-sub"></span>
-        </div>
+    <!-- RIGHT: W/kg Leaderboard -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2 class="panel__title">⚡ W/kg Live</h2>
+        <span class="panel__sub" id="wkg-meta">–</span>
       </div>
-
-      <!-- Trikots -->
-      <div class="jerseys" id="jerseys" aria-label="Trikotträger"></div>
-
-      <!-- Top-Favoriten -->
-      <h2 class="section-h">Top-Favoriten <span class="muted">(Virtual-GC-Top-10)</span></h2>
-      <div class="cards glass" id="top-cards"></div>
-
-      <!-- Technische Sektion: W/kg, Survival, Time-Cut -->
-      <div class="techgrid">
-        <!-- Live-Gradient + W/kg-Leaderboard -->
-        <div class="glass tech-panel" id="power-panel" hidden>
-          <h2 class="section-h">⚡ Live-Leistung
-            <span class="muted" id="power-gradient">–</span>
-          </h2>
-          <div class="wkg-list" id="wkg-list"></div>
-        </div>
-
-        <!-- Ausreißer-Überlebenssimulation -->
-        <div class="glass tech-panel" id="survival-panel" hidden>
-          <h2 class="section-h">🎯 Ausreißer-Überleben</h2>
-          <div class="survival-bar">
-            <div class="survival-bar__fill" id="survival-fill"></div>
-            <span class="survival-bar__pct" id="survival-pct">–</span>
-          </div>
-          <div class="survival-meta" id="survival-meta"></div>
-        </div>
-
-        <!-- Time-Cut (hors délai) -->
-        <div class="glass tech-panel" id="timecut-panel" hidden>
-          <h2 class="section-h">⏱ Time-Cut
-            <span class="muted" id="timecut-threshold"></span>
-          </h2>
-          <div class="timecut-list" id="timecut-list"></div>
-        </div>
+      <div class="wkg-controls">
+        <button class="btn btn--ghost btn--sm" data-sort="w_per_kg">W/kg</button>
+        <button class="btn btn--ghost btn--sm" data-sort="watts">Watt</button>
+        <button class="btn btn--ghost btn--sm" data-sort="speed_kph">km/h</button>
       </div>
-
-      <!-- Gap-Chart -->
-      <h2 class="section-h" id="gap-chart-h" hidden>Lücken<span class="muted" id="gap-chart-groups-info"></span></h2>
-      <div class="gap-chart glass" id="gap-chart" hidden></div>
-
-      <!-- GC-Tabelle -->
-      <h2 class="section-h">Gesamtwertung <span class="muted">(Virtual GC)</span></h2>
-      <div class="table-wrap glass">
-        <table id="gc-table">
-          <thead>
-            <tr>
-              <th>#</th><th>Bib</th><th>Name</th><th>Team</th>
-              <th class="num">Rückstand</th>
-            </tr>
-          </thead>
-          <tbody id="gc-body"></tbody>
-        </table>
-      </div>
-
-      <!-- Gruppen -->
-      <h2 class="section-h">Live-Gruppen</h2>
-      <div class="groups glass" id="groups"></div>
-
-      <!-- Berg/Sprint-Panel -->
-      <div class="cps glass" id="cps" hidden>
-        <h2 class="section-h">Berg- & Sprint-Wertungen <span class="muted" id="cp-info"></span></h2>
-        <div id="cp-list"></div>
-      </div>
-
-      <!-- Alarm-Panel -->
-      <div class="alarms glass" id="alarms" hidden>
-        <h2 class="section-h">Alarme & Ereignisse</h2>
-        <div id="alarm-list"></div>
-      </div>
-
+      <table class="tbl tbl--wkg" id="wkg-table">
+        <thead><tr><th>#</th><th>Name</th><th class="num">W/kg</th><th class="num">W</th><th class="num">km/h</th></tr></thead>
+        <tbody id="wkg-body"></tbody>
+      </table>
     </section>
+
+    <!-- FULL WIDTH: Live-Gruppen -->
+    <section class="panel panel--full">
+      <div class="panel__head">
+        <h2 class="panel__title">Live-Gruppen</h2>
+        <span class="panel__sub" id="groups-info">–</span>
+      </div>
+      <table class="tbl tbl--groups" id="groups-table">
+        <thead>
+          <tr>
+            <th>Gruppe</th><th class="num">Size</th><th class="num">Gap</th>
+            <th class="num">km/h</th><th class="num">W/kg kol.</th>
+            <th class="num">Rest-km</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="groups-body"></tbody>
+      </table>
+    </section>
+
+    <!-- Survival + TimeCut + Trikots + Alarms (4-Spalten) -->
+    <section class="panel">
+      <div class="panel__head"><h2 class="panel__title">🎯 Überleben</h2></div>
+      <div class="survival" id="survival-box">
+        <div class="survival__bar"><div class="survival__fill" id="survival-fill"></div></div>
+        <span class="survival__pct" id="survival-pct">–</span>
+        <div class="survival__meta" id="survival-meta"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2 class="panel__title">⏱ Time-Cut</h2><span class="panel__sub" id="tc-threshold">–</span></div>
+      <div class="tc-list" id="tc-list"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2 class="panel__title">👕 Trikots</h2></div>
+      <div class="jerseys" id="jerseys"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head"><h2 class="panel__title">🔔 Alarme</h2></div>
+      <div class="alarms" id="alarms"></div>
+    </section>
+
   </main>
 
-  <footer class="footer glass">
+  <footer class="ftr">
     <span id="last-update"></span>
-    <span class="muted">Daten: racecenter.letour.fr (inoffiziell)</span>
+    <span class="muted">Daten: racecenter.letour.fr (inoffiziell) · <a href="/api/trail?n=20" target="_blank">Trail</a></span>
   </footer>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          crossorigin=""></script>
   <script src="/app.js"></script>
 </body>
 </html>
