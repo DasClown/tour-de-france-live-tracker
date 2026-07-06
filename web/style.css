@@ -694,3 +694,100 @@ tbody tr td:nth-child(3) {
   color: var(--fg);
   border: 1px solid var(--glass-border);
 }
+
+/* ========================================================================= */
+/* Technische Sektion (Features 6-8): W/kg, Survival, Time-Cut                */
+/* ========================================================================= */
+
+.techgrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+@media (min-width: 980px) {
+  .techgrid { grid-template-columns: 1fr 1fr; }
+}
+
+.tech-panel {
+  padding: 14px;
+}
+.tech-panel .section-h {
+  margin: 0 0 10px 0;
+  font-size: 0.95rem;
+}
+
+/* W/kg-Leaderboard ------------------------------------------------------- */
+.wkg-list { display: flex; flex-direction: column; gap: 6px; }
+.wkg-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+}
+.wkg-rank { font-weight: 700; color: var(--accent); }
+.wkg-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wkg-watts { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem; }
+.wkg-wperkg {
+  font-weight: 700; font-variant-numeric: tabular-nums;
+  padding: 2px 6px; border-radius: 4px;
+  background: var(--accent); color: var(--bg);
+  min-width: 48px; text-align: center;
+}
+.wkg-wperkg--high { background: #ff3b30; color: #fff; }   /* >6 W/kg = extrem */
+.wkg-wperkg--med  { background: var(--accent); }            /* 4-6 W/kg */
+
+/* Survival-Bar ---------------------------------------------------------- */
+.survival-bar {
+  position: relative;
+  height: 32px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.survival-bar__fill {
+  position: absolute; inset: 0 auto 0 0;
+  width: 0%;
+  background: linear-gradient(90deg, #ff3b30, #ffcc00, #34c759);
+  transition: width 0.6s ease;
+}
+.survival-bar__pct {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  height: 100%;
+  font-weight: 700; font-size: 1.05rem;
+  color: var(--fg); text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.survival-meta {
+  font-size: 0.85rem; color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Time-Cut -------------------------------------------------------------- */
+.timecut-list { display: flex; flex-direction: column; gap: 4px; }
+.timecut-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 0.88rem;
+}
+.timecut-row--danger     { background: rgba(255,59,48,0.18); }
+.timecut-row--eliminated { background: rgba(255,59,48,0.30); }
+.timecut-row--warning    { background: rgba(255,204,0,0.14); }
+.timecut-status {
+  font-weight: 700; font-size: 0.75rem;
+  padding: 2px 6px; border-radius: 3px;
+  text-transform: uppercase;
+}
+.timecut-status--safe        { background: #34c759; color: #000; }
+.timecut-status--warning     { background: #ffcc00; color: #000; }
+.timecut-status--danger      { background: #ff9500; color: #000; }
+.timecut-status--eliminated  { background: #ff3b30; color: #fff; }
+.timecut-margin { font-variant-numeric: tabular-nums; color: var(--muted); }

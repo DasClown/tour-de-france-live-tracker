@@ -820,6 +820,101 @@ function renderGroups(groups) {
 }
 
 // ----------------------------------------------------------------- #
+// Technische Features (6-8): Power, Survival, Time-Cut
+// ----------------------------------------------------------------- #
+function renderPower(d) {
+  const panel = $("power-panel");
+  const power = d.power;
+  if (!power || !power.riders || power.riders.length === 0) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+  if (panel) panel.hidden = false;
+  const gradEl = $("power-gradient");
+  if (gradEl) {
+    const g = power.gradient_pct ?? 0;
+    gradEl.textContent = `· ${g.toFixed(1)} % Steigung`;
+  }
+  const list = $("wkg-list");
+  if (!list) return;
+  // Top 8 nach W/kg
+  const top = power.riders.slice(0, 8);
+  list.innerHTML = top.map((r, i) => {
+    const wkgClass = r.w_per_kg >= 6 ? "wkg-wperkg--high" : "wkg-wperkg--med";
+    return `<div class="wkg-row">
+      <span class="wkg-rank">${i + 1}</span>
+      <span class="wkg-name" title="${r.label}">${r.label}</span>
+      <span class="wkg-watts">${Math.round(r.watts)} W</span>
+      <span class="wkg-wperkg ${wkgClass}">${r.w_per_kg.toFixed(1)}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderSurvival(d) {
+  const panel = $("survival-panel");
+  const surv = d.breakaway_survival;
+  if (!surv || surv.available === false) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+  if (panel) panel.hidden = false;
+  const pct = surv.survival_pct ?? 0;
+  const fill = $("survival-fill");
+  const pctEl = $("survival-pct");
+  if (fill) fill.style.width = `${pct}%`;
+  if (pctEl) pctEl.textContent = `${pct.toFixed(0)} %`;
+  const meta = $("survival-meta");
+  if (meta) {
+    const conf = surv.confidence || "?";
+    const brk = surv.breakaway_name || "?";
+    const brkSize = surv.breakaway_size ?? "?";
+    const gap = surv.gap_s ? formatGap(surv.gap_s) : "?";
+    meta.innerHTML = `${brk} (${brkSize} F., ${gap} Vorsprung)
+      · Konfidenz: <strong>${conf}</strong>`;
+  }
+}
+
+function renderTimeCut(d) {
+  const panel = $("timecut-panel");
+  const tc = d.time_cut;
+  if (!tc || !tc.groups || tc.groups.length === 0) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+  if (panel) panel.hidden = false;
+  const thr = $("timecut-threshold");
+  if (thr) thr.textContent = `· ${tc.threshold_pct}% Cut`;
+  const list = $("timecut-list");
+  if (!list) return;
+  // Nur gefährdete + warning zeigen, safe ausblenden (zu viel Noise)
+  const relevant = tc.groups.filter(g => g.status !== "safe").slice(0, 8);
+  if (relevant.length === 0) {
+    list.innerHTML = `<div class="timecut-row">
+      <span>Alle Gruppen sicher</span>
+      <span class="timecut-status timecut-status--safe">SAFE</span>
+      <span></span>
+    </div>`;
+    return;
+  }
+  list.innerHTML = relevant.map(g => {
+    const margin = g.margin_s != null ? formatGap(Math.abs(g.margin_s)) : "?";
+    const marginLabel = g.margin_s >= 0 ? `+${margin}` : `über Cut`;
+    return `<div class="timecut-row timecut-row--${g.status}">
+      <span>${g.name}</span>
+      <span class="timecut-margin">${marginLabel}</span>
+      <span class="timecut-status timecut-status--${g.status}">${g.status.toUpperCase()}</span>
+    </div>`;
+  }).join("");
+}
+
+// Hilfsfunktion: Sekunden -> "Xm Ys" oder "X.Xh"
+function formatGap(s) {
+  if (s == null) return "?";
+  if (s < 3600) return `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
+  return `${(s / 3600).toFixed(1)}h`;
+}
+
+// ----------------------------------------------------------------- #
 // Render-Dispatch (batched via rAF)
 // ----------------------------------------------------------------- #
 function applyUpdate(data) {
@@ -841,6 +936,9 @@ function applyUpdate(data) {
     renderMap(d);
     renderBergSprintPanel(d);
     renderAlarms(d);
+    renderPower(d);
+    renderSurvival(d);
+    renderTimeCut(d);
     setLastUpdate();
   });
 }

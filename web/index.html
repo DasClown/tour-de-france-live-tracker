@@ -106,6 +106,35 @@
       <h2 class="section-h">Top-Favoriten <span class="muted">(Virtual-GC-Top-10)</span></h2>
       <div class="cards glass" id="top-cards"></div>
 
+      <!-- Technische Sektion: W/kg, Survival, Time-Cut -->
+      <div class="techgrid">
+        <!-- Live-Gradient + W/kg-Leaderboard -->
+        <div class="glass tech-panel" id="power-panel" hidden>
+          <h2 class="section-h">⚡ Live-Leistung
+            <span class="muted" id="power-gradient">–</span>
+          </h2>
+          <div class="wkg-list" id="wkg-list"></div>
+        </div>
+
+        <!-- Ausreißer-Überlebenssimulation -->
+        <div class="glass tech-panel" id="survival-panel" hidden>
+          <h2 class="section-h">🎯 Ausreißer-Überleben</h2>
+          <div class="survival-bar">
+            <div class="survival-bar__fill" id="survival-fill"></div>
+            <span class="survival-bar__pct" id="survival-pct">–</span>
+          </div>
+          <div class="survival-meta" id="survival-meta"></div>
+        </div>
+
+        <!-- Time-Cut (hors délai) -->
+        <div class="glass tech-panel" id="timecut-panel" hidden>
+          <h2 class="section-h">⏱ Time-Cut
+            <span class="muted" id="timecut-threshold"></span>
+          </h2>
+          <div class="timecut-list" id="timecut-list"></div>
+        </div>
+      </div>
+
       <!-- Gap-Chart -->
       <h2 class="section-h" id="gap-chart-h" hidden>Lücken<span class="muted" id="gap-chart-groups-info"></span></h2>
       <div class="gap-chart glass" id="gap-chart" hidden></div>

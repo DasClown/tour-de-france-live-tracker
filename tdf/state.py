@@ -21,9 +21,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
+
+log = logging.getLogger("tdf.state")
 
 from . import config as cfg
 from . import prediction as prediction_mod
@@ -31,6 +34,9 @@ from . import gap_chart as gap_chart_mod
 from . import alarms as alarms_mod
 from . import classification as classification_mod
 from . import map_data as map_data_mod
+from . import power as power_mod
+from . import timecut as timecut_mod
+from . import simulation as simulation_mod
 
 # --------------------------------------------------------------------------- #
 # Datenklassen
@@ -124,6 +130,16 @@ class State:
         default_factory=alarms_mod.AlarmSystem)
     # Aktuelle Alarmliste für den Snapshot
     _pending_alarms: list[dict[str, Any]] = field(default_factory=list)
+
+    # Technische Features (6-9): Power, Gradient, Time-Cut, Simulation
+    # Profil-Punkte (km_done, alt) für Live-Gradient. Wird vom Server beim
+    # Laden des Profils gesetzt. Leer -> Gradient 0 (Flachland-Annahme).
+    profile_points: list[dict[str, Any]] = field(default_factory=list)
+    # Etappentyp für Time-Cut ('flat', 'mountain', 'medium', 'itt', 'ttt').
+    stage_type: str = "flat"
+    # Geschätzte Siegerzeit (Sekunden) — wird aus der Spitzengruppe projiziert.
+    # None, solange keine valide Projektion möglich (vor Start / keine Daten).
+    estimated_winner_time_s: float | None = None
 
     # Bookkeeping
     last_useful_update: float = 0.0
@@ -532,6 +548,88 @@ def to_snapshot(state: State, *, top_limit: int | None = None,
         classifications=classifications,
     )
 
+    # --- Technische Features (6-9) ---
+    # Live-Gradient aus dem Profil anhand der aktuellen Spitzengruppe.
+    # Wenn kein Profil vorhanden -> 0.0 (Flachland-Annahme).
+    current_gradient = 0.0
+    if state.profile_points and state.groups:
+        # Aktuelle km-Position = completedDistance der Spitzengruppe.
+        lead = state.groups[0]
+        lead_km = getattr(lead, "remaining_km", None)
+        # Wir brauchen km_done, aber GroupInfo hat remaining_km.
+        # Approximation: total_km - remaining_km = km_done.
+        # Ohne total_km -> wir nehmen das Profilende als Referenz und
+        # rechnen vom Ende her. Einfacher: Wir bitten den Server, die
+        # korrekte km-Position via app["profile"] zu setzen; hier reicht
+        # der Fallback, dass wir die Spitzengruppe über remaining_km
+        # im Profil suchen.
+        try:
+            total_km = (state.profile_points[-1].get("km_done", 0.0)
+                        if state.profile_points else 0.0)
+            if lead_km is not None and total_km > 0:
+                current_km = max(0.0, total_km - float(lead_km))
+                g = power_mod.gradient_at_km(state.profile_points, current_km)
+                if g is not None:
+                    current_gradient = g
+        except (TypeError, ValueError, IndexError):
+            pass
+
+    # Feature 6: Power (Watt + W/kg) für die Top-N-Rider.
+    # Peloton-Bibs = alle Bibs der größten Gruppe (für Drafting-Savings).
+    peloton_bibs: set[int] = set()
+    if state.groups:
+        biggest = max(state.groups, key=lambda x: x.size)
+        peloton_bibs = set(biggest.bibs)
+    power_data = power_mod.compute_top_riders_power(
+        top_riders_data, gradient_pct=current_gradient,
+        peloton_bibs=peloton_bibs,
+    )
+
+    # Feature 7: Time-Cut-Analyse.
+    # Siegerzeit aus der Spitzengruppe projizieren, falls möglich.
+    winner_time = state.estimated_winner_time_s
+    if winner_time is None and state.groups:
+        lead = state.groups[0]
+        lead_speed = getattr(lead, "speed", None)
+        lead_rem = getattr(lead, "remaining_km", None)
+        # Wir kennen die bisherige Fahrzeit nicht direkt. Approximation:
+        # Wenn die Spitze Restdistanz und Geschwindigkeit hat, und wir
+        # die Gesamtetappenlänge kennen, können wir die zurückgelegte
+        # Zeit abschätzen. Ohne Gesamt-Länge -> None (keine Time-Cut-Aussage).
+        # Vereinfachung: wenn eine gc-Zeit existiert (base_gc), nutzen wir
+        # deren Spitze als Schätzer.
+        if not gc and not state.base_gc:
+            winner_time = None
+    if gc and winner_time is None:
+        # GC-Spitze hat absolute_seconds -> das ist die echte Siegerzeit.
+        try:
+            winner_time = float(gc[0].absolute_seconds or 0) or None
+        except (TypeError, ValueError, IndexError):
+            winner_time = None
+
+    avg_speed = 40.0  # Default, falls keine echte Messung
+    if state.groups:
+        lead_speed = getattr(state.groups[0], "speed", None)
+        if lead_speed:
+            avg_speed = float(lead_speed)
+
+    time_cut: dict[str, Any] | None = None
+    if winner_time and winner_time > 0:
+        time_cut = timecut_mod.analyze_groups(
+            groups=list(state.groups),
+            winner_time_s=winner_time,
+            avg_speed_kph=avg_speed,
+            stage_type=state.stage_type,
+        )
+
+    # Feature 8: Ausreißer-Überlebenssimulation.
+    survival = None
+    try:
+        survival = simulation_mod.simulate_from_groups(
+            list(state.groups), n_simulations=200, seed=42)
+    except Exception as e:  # defensive: darf Snapshot nie crashen
+        log.warning("Survival-Simulation fehlgeschlagen: %s", e)
+
     result: dict[str, Any] = {
         "year": state.year,
         "stage": state.stage,
@@ -558,6 +656,13 @@ def to_snapshot(state: State, *, top_limit: int | None = None,
         "classifications": classifications,
         "map": map_data,
         "alarms": state.alarm_system.get_alarms(limit=10),
+        # Technische Features (6-9)
+        "power": {
+            "gradient_pct": round(current_gradient, 1),
+            "riders": power_data[:10],  # Top 10 nach W/kg
+        },
+        "time_cut": time_cut,
+        "breakaway_survival": survival,
     }
     return result
 

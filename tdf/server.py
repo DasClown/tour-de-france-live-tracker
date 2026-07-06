@@ -335,6 +335,33 @@ async def handle_map_data(request: web.Request) -> web.Response:
 
 
 # --------------------------------------------------------------------------- #
+# Technische Features (6-9): Power, Time-Cut, Survival
+# --------------------------------------------------------------------------- #
+async def handle_power(request: web.Request) -> web.Response:
+    """Feature 6: Watt + W/kg-Leaderboard für die Top-N-Rider."""
+    state: st.State = request.app["state"]
+    async with state.lock:
+        snap = st.to_snapshot(state)
+    return web.json_response(snap.get("power") or {"gradient_pct": 0, "riders": []})
+
+
+async def handle_time_cut(request: web.Request) -> web.Response:
+    """Feature 7: Time-Cut-Analyse aller Gruppen."""
+    state: st.State = request.app["state"]
+    async with state.lock:
+        snap = st.to_snapshot(state)
+    return web.json_response(snap.get("time_cut") or {"groups": []})
+
+
+async def handle_breakaway_survival(request: web.Request) -> web.Response:
+    """Feature 8: Ausreißer-Überlebenssimulation."""
+    state: st.State = request.app["state"]
+    async with state.lock:
+        snap = st.to_snapshot(state)
+    return web.json_response(snap.get("breakaway_survival") or {"available": False})
+
+
+# --------------------------------------------------------------------------- #
 # WebSocket
 # --------------------------------------------------------------------------- #
 async def handle_ws(request: web.Request) -> web.WebSocketResponse:
@@ -431,6 +458,42 @@ async def on_startup(app: web.Application) -> None:
         log.warning("Profil-Laden fehlgeschlagen: %s", e)
         app["profile"] = None
 
+    # Profil-Punkte für Live-Gradient (Feature 6) in den State spiegeln.
+    # Das erlaubt to_snapshot, die aktuelle Steigung ohne app-Zugriff zu
+    # berechnen. Profile-Objekt hat .points (list[ProfilePoint]).
+    prof = app.get("profile")
+    if prof is not None and hasattr(prof, "points"):
+        state.profile_points = [
+            {"km_done": float(p.km_done), "alt": float(p.alt_m)}
+            for p in prof.points
+        ]
+        log.info("Profil-Punkte für Live-Gradient: %d", len(state.profile_points))
+    else:
+        state.profile_points = []
+
+    # Etappentyp für Time-Cut (Feature 7). Best-Effort aus dem
+    # geladenen Stage-Objekt; Default 'flat' ist sicher.
+    try:
+        stages = app.get("stages") or []
+        if stages and state.stage is not None:
+            stage_obj = static.find_stage(stages, state.stage)
+            if stage_obj is not None:
+                stype = (stage_obj.get("stageType") or "").lower()
+                # Mapping ASO -> unsere Typen.
+                if "mountain" in stype or "high_mountain" in stype:
+                    state.stage_type = "mountain"
+                elif "medium" in stype or "hilly" in stype:
+                    state.stage_type = "medium"
+                elif "time_trial" in stype or stype == "itt":
+                    state.stage_type = "itt"
+                elif "team_time_trial" in stype or stype == "ttt":
+                    state.stage_type = "ttt"
+                else:
+                    state.stage_type = "flat"
+                log.info("Stage-Typ für Time-Cut: %s", state.stage_type)
+    except Exception as e:
+        log.warning("Stage-Typ-Bestimmung fehlgeschlagen: %s", e)
+
     # JSONL-Trail anlegen (wenn Pfad gesetzt).
     jsonl_path = app.get("jsonl_path") or cfg.JSONL_PATH
     if jsonl_path:
@@ -503,6 +566,9 @@ def build_app(*, year: int, stage: int | None, port: int,
     app.router.add_get("/api/classification", handle_classification)
     app.router.add_get("/api/alarms", handle_alarms)
     app.router.add_get("/api/map-data", handle_map_data)
+    app.router.add_get("/api/power", handle_power)
+    app.router.add_get("/api/time-cut", handle_time_cut)
+    app.router.add_get("/api/breakaway-survival", handle_breakaway_survival)
     app.router.add_get("/ws", handle_ws)
     # Frontend (keine Auth – Token geht via JS in Fetch-Header).
     app.router.add_get("/", handle_index)

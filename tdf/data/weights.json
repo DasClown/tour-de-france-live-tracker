@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "description": "Bekannte Rider-Gewichte (kg) für W/kg-Berechnungen. Werte aus öffentlichen Profilen (Wikipedia/PCS). Für nicht gelistete Rider gilt DEFAULT_KG.",
+    "default_kg": 70,
+    "source": "public profiles, hand-curated 2026-07-06",
+    "note": "Alle Werte sind Annäherungen; Rider-Gewicht variiert über die Saison. Für Live-W/kg reicht das für eine realistische Einordnung."
+  },
+  "_default_kg": 70,
+
+  "1":   {"name": "Tadej POGACAR",        "kg": 66, "type": "GC"},
+  "2":   {"name": "Isaac DEL TORO",        "kg": 63, "type": "GC"},
+  "3":   {"name": "Felix GROSSSCHARTNER",  "kg": 64, "type": "climber"},
+  "4":   {"name": "Brandon MCNULTY",       "kg": 64, "type": "GC"},
+  "5":   {"name": "Nils POLITT",           "kg": 75, "type": "rouleur"},
+  "6":   {"name": "Florian VERMEERSCH",    "kg": 78, "type": "rouleur"},
+  "7":   {"name": "Tim WELLENS",           "kg": 68, "type": "rouleur"},
+  "8":   {"name": "Adam YATES",            "kg": 60, "type": "GC"},
+
+  "11":  {"name": "Jonas VINGEGAARD",      "kg": 60, "type": "GC"},
+  "12":  {"name": "Edoardo AFFINI",        "kg": 75, "type": "tt"},
+  "13":  {"name": "Bruno ARMIRAIL",        "kg": 71, "type": "tt"},
+  "14":  {"name": "Victor CAMPENAERTS",    "kg": 71, "type": "tt"},
+  "15":  {"name": "Per Strand HAGENES",    "kg": 75, "type": "sprinter"},
+  "16":  {"name": "Matteo JORGENSON",      "kg": 65, "type": "GC"},
+  "17":  {"name": "Sepp KUSS",             "kg": 58, "type": "climber"},
+  "18":  {"name": "Davide PIGANZOLI",      "kg": 62, "type": "climber"},
+
+  "21":  {"name": "Remco EVENEPOEL",       "kg": 63, "type": "GC"},
+  "22":  {"name": "Mattia CATTANEO",       "kg": 65, "type": "climber"},
+  "23":  {"name": "Nico DENZ",             "kg": 75, "type": "rouleur"},
+  "24":  {"name": "Jai HINDLEY",           "kg": 60, "type": "GC"},
+  "25":  {"name": "Florian LIPOWITZ",      "kg": 67, "type": "climber"},
+  "26":  {"name": "Jan TRATNIK",           "kg": 64, "type": "climber"},
+  "27":  {"name": "Tim VAN DIJKE",         "kg": 80, "type": "rouleur"},
+  "28":  {"name": "Maxim VAN GILS",        "kg": 70, "type": "rouleur"},
+
+  "31":  {"name": "Juan AYUSO",            "kg": 63, "type": "GC"},
+  "32":  {"name": "Derek James GEE",       "kg": 73, "type": "rouleur"},
+  "33":  {"name": "Mads PEDERSEN",         "kg": 80, "type": "sprinter"},
+  "34":  {"name": "Quinn SIMMONS",         "kg": 78, "type": "rouleur"},
+  "35":  {"name": "Mattias SKJELMOSE",     "kg": 63, "type": "GC"},
+  "36":  {"name": "Toms SKUJINS",          "kg": 70, "type": "rouleur"}
+}
