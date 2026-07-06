@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS LOGISTICS — Autonomous Freight Network</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #07070e;
+            --bg-surface: #0f0f1a;
+            --bg-panel: rgba(15, 15, 26, 0.55);
+            --amber: #f0a500;
+            --amber-glow: rgba(240, 165, 0, 0.3);
+            --cyan: #00d4ff;
+            --cyan-glow: rgba(0, 212, 255, 0.25);
+            --steel: #8a8fa3;
+            --text: #e2e2e8;
+            --text-dim: #8a8fa3;
+            --border: rgba(255, 255, 255, 0.06);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --transition: 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--cyan) var(--bg-deep); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-deep); }
+        ::-webkit-scrollbar-thumb { background: var(--cyan); border-radius: 3px; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text);
+            overflow-x: hidden;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+        #particleCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+        #truckCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        section { position: relative; z-index: 2; }
+        #hero { min-height: 100vh; display: flex; align-items: center; justify-content: flex-start; padding: 80px 8%; position: relative; overflow: hidden; }
+        #hero .truck-stage { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+        .hero-content { position: relative; z-index: 3; max-width: 580px; }
+        .hero-badge { display: inline-flex; align-items: center; gap: 10px; background: var(--bg-panel); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid var(--border); border-radius: 50px; padding: 8px 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.12em; color: var(--cyan); text-transform: uppercase; margin-bottom: 28px; animation: floatBadge 4s ease-in-out infinite; }
+        .hero-badge .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 10px var(--cyan), 0 0 24px var(--cyan-glow); animation: pulse 1.8s ease-in-out infinite; }
+        @keyframes floatBadge { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.8); } }
+        .hero-content h1 { font-size: clamp(2.8rem, 6vw, 5rem); font-weight: 900; line-height: 1.08; letter-spacing: -0.02em; margin-bottom: 20px; color: #fff; }
+        .hero-content h1 .accent { background: linear-gradient(135deg, var(--amber) 0%, #ff6b35 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .hero-content p { font-size: 1.15rem; color: var(--text-dim); margin-bottom: 34px; max-width: 440px; line-height: 1.7; }
+        .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+        .btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 28px; border-radius: 50px; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none; text-decoration: none; transition: var(--transition); font-family: 'Inter', sans-serif; }
+        .btn-primary { background: var(--amber); color: #0a0a0f; box-shadow: 0 8px 32px var(--amber-glow); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(240,165,0,0.45); }
+        .btn-ghost { background: var(--bg-panel); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.12); color: #fff; }
+        .btn-ghost:hover { border-color: var(--cyan); box-shadow: 0 0 24px var(--cyan-glow); }
+        .scroll-indicator { position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; animation: bob 2s ease-in-out infinite; }
+        .scroll-line { width: 1px; height: 40px; background: linear-gradient(to bottom, var(--cyan), transparent); border-radius: 1px; }
+        @keyframes bob { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(8px); } }
+        .section-divider { position: relative; height: 60px; z-index: 2; overflow: hidden; }
+        .section-divider::before { content: ''; position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: linear-gradient(90deg, transparent, var(--cyan-glow), var(--cyan), var(--cyan-glow), transparent); opacity: 0.5; }
+        .section-divider .grid-lines { position: absolute; inset: 0; background-image: linear-gradient(rgba(0,212,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,212,255,0.04) 1px, transparent 1px); background-size: 30px 30px; mask-image: linear-gradient(to bottom, transparent 0%, black 40%, black 60%, transparent 100%); }
+        #features { padding: 100px 8% 120px; position: relative; z-index: 2; }
+        .section-header { text-align: center; margin-bottom: 70px; }
+        .section-header .section-label { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--cyan); margin-bottom: 12px; }
+        .section-header h2 { font-size: clamp(2rem,4vw,3rem); font-weight: 800; letter-spacing: -0.02em; color: #fff; margin-bottom: 12px; }
+        .section-header p { color: var(--text-dim); font-size: 1.05rem; }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; max-width: 1200px; margin: 0 auto; }
+        .feature-card { background: var(--bg-panel); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--border); border-radius: var(--radius); padding: 36px 30px; transition: var(--transition); position: relative; overflow: hidden; }
+        .feature-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, var(--cyan), transparent); opacity: 0; transition: opacity 0.5s; }
+        .feature-card:hover::before { opacity: 1; }
+        .feature-card:hover { border-color: rgba(0,212,255,0.3); transform: translateY(-4px); }
+        .feature-icon { width: 52px; height: 52px; border-radius: var(--radius-sm); background: rgba(0,212,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin-bottom: 20px; border: 1px solid rgba(0,212,255,0.15); }
+        .feature-card h3 { font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 10px; }
+        .feature-card p { font-size: 0.92rem; color: var(--text-dim); line-height: 1.65; }
+        #dashboard { padding: 80px 8% 120px; position: relative; z-index: 2; }
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; max-width: 1100px; margin: 0 auto 50px; }
+        .stat-card { background: var(--bg-panel); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px 26px; text-align: center; }
+        .stat-card .stat-value { font-size: 2.8rem; font-weight: 900; color: #fff; font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; }
+        .stat-card .stat-value .unit { font-size: 1.2rem; color: var(--amber); }
+        .stat-card .stat-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
+        .stat-card .stat-trend { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; color: #22c55e; margin-top: 8px; }
+        .live-feed { max-width: 1100px; margin: 0 auto; background: var(--bg-panel); backdrop-filter: blur(20px); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 32px; }
+        .live-feed-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .live-feed-header h3 { font-size: 1rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px; }
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulse 1.5s ease-in-out infinite; }
+        .feed-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+        .feed-item { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.9rem; }
+        .feed-time { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--cyan); min-width: 54px; }
+        .feed-status { padding: 3px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+        .status-transit { background: rgba(240,165,0,0.15); color: var(--amber); }
+        .status-delivered { background: rgba(34,197,94,0.15); color: #22c55e; }
+        .status-processing { background: rgba(0,212,255,0.15); color: var(--cyan); }
+        .feed-detail { flex: 1; color: var(--text-dim); }
+        .feed-detail strong { color: #fff; }
+        footer { position: relative; z-index: 2; border-top: 1px solid var(--border); padding: 50px 8% 30px; background: var(--bg-surface); }
+        .footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 40px; max-width: 1100px; margin: 0 auto 40px; }
+        .footer-col h4 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-dim); margin-bottom: 16px; }
+        .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+        .footer-col ul li a { color: var(--steel); text-decoration: none; font-size: 0.9rem; transition: color 0.3s; }
+        .footer-col ul li a:hover { color: var(--cyan); }
+        .footer-bottom { max-width: 1100px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding-top: 24px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--text-dim); }
+        .footer-logo { font-weight: 800; font-size: 1.2rem; color: #fff; }
+        .footer-logo span { color: var(--amber); }
+        @media (max-width: 768px) { #hero { padding: 60px 5%; justify-content: center; text-align: center; } .hero-content { max-width: 100%; } .hero-content p { max-width: 100%; } .hero-actions { justify-content: center; } .features-grid { grid-template-columns: 1fr; } .dashboard-grid { grid-template-columns: repeat(2,1fr); } }
+        @media (max-width: 480px) { .dashboard-grid { grid-template-columns: 1fr; } .hero-actions { flex-direction: column; align-items: center; } }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+    <section id="hero">
+        <div class="truck-stage" id="truckStage"><canvas id="truckCanvas"></canvas></div>
+        <div class="hero-content">
+            <div class="hero-badge"><span class="pulse-dot"></span> Neural Network Active</div>
+            <h1>Autonomous<br><span class="accent">Logistics</span> Platform</h1>
+            <p>Next-generation freight orchestration powered by distributed AI. Real-time routing, predictive maintenance, and zero-latency tracking across the global supply chain.</p>
+            <div class="hero-actions">
+                <a href="#dashboard" class="btn btn-primary">▸ Live Dashboard</a>
+                <a href="#features" class="btn btn-ghost">Explore Platform</a>
+            </div>
+        </div>
+        <div class="scroll-indicator"><span>Scroll</span><div class="scroll-line"></div></div>
+    </section>
+    <div class="section-divider"><div class="grid-lines"></div></div>
+    <section id="features">
+        <div class="section-header">
+            <div class="section-label">Core Capabilities</div>
+            <h2>Engineered for Scale</h2>
+            <p>Every component optimized for planetary logistics operations</p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card"><div class="feature-icon">🛰️</div><h3>Real‑time Tracking</h3><p>Sub-meter precision via multi-constellation GNSS with LEO satellite augmentation. Latency under 50ms globally.</p></div>
+            <div class="feature-card"><div class="feature-icon">🧠</div><h3>AI Route Optimization</h3><p>Proprietary neural nets process 2.4M route permutations per second, factoring weather, traffic, and port congestion.</p></div>
+            <div class="feature-card"><div class="feature-icon">📊</div><h3>Predictive Analytics</h3><p>Digital twin simulation forecasts disruptions 72 hours ahead. Fleet utilization improved by an average of 34%.</p></div>
+            <div class="feature-card"><div class="feature-icon">🤖</div><h3>Automated Warehousing</h3><p>Swarm robotics coordinates 500+ AMRs per facility. Sortation throughput exceeds 18,000 parcels per hour.</p></div>
+            <div class="feature-card"><div class="feature-icon">🚛</div><h3>Fleet Management</h3><p>Unified control plane for 12,000+ vehicles. Predictive maintenance cuts downtime by 62% across the network.</p></div>
+            <div class="feature-card"><div class="feature-icon">📍</div><h3>Last‑Mile Delivery</h3><p>Dynamic dispatch engine matches parcels to EV couriers and drone hubs within 15 seconds of zone entry.</p></div>
+        </div>
+    </section>
+    <div class="section-divider"><div class="grid-lines"></div></div>
+    <section id="dashboard">
+        <div class="section-header">
+            <div class="section-label">Command Center</div>
+            <h2>Live Network Status</h2>
+            <p>Real-time telemetry from the global freight mesh</p>
+        </div>
+        <div class="dashboard-grid">
+            <div class="stat-card"><div class="stat-value"><span class="counter" data-target="12847">0</span></div><div class="stat-label">Active Shipments</div><div class="stat-trend">▲ 12.4%</div></div>
+            <div class="stat-card"><div class="stat-value"><span class="counter" data-target="3421">0</span></div><div class="stat-label">Fleet Vehicles</div><div class="stat-trend">▲ 8.1%</div></div>
+            <div class="stat-card"><div class="stat-value"><span class="counter" data-target="987">0</span><span class="unit">%</span></div><div class="stat-label">Delivery Rate</div><div class="stat-trend">▲ 2.3%</div></div>
+            <div class="stat-card"><div class="stat-value"><span class="counter" data-target="942">0</span><span class="unit">%</span></div><div class="stat-label">Route Efficiency</div><div class="stat-trend">▲ 5.7%</div></div>
+        </div>
+        <div class="live-feed">
+            <div class="live-feed-header"><h3><span class="live-dot"></span> Live Shipment Feed</h3><span style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--text-dim)">REFRESH 2.3s</span></div>
+            <ul class="feed-list" id="feedList">
+                <li class="feed-item"><span class="feed-time">14:32:08</span><span class="feed-status status-transit">IN TRANSIT</span><span class="feed-detail"><strong>Unit A-2287</strong> — Departed Rotterdam Hub</span></li>
+                <li class="feed-item"><span class="feed-time">14:31:55</span><span class="feed-status status-delivered">DELIVERED</span><span class="feed-detail"><strong>Unit B-4419</strong> — Signed at Singapore Port</span></li>
+                <li class="feed-item"><span class="feed-time">14:31:42</span><span class="feed-status status-processing">PROCESSING</span><span class="feed-detail"><strong>Unit C-7732</strong> — Customs clearance LAX</span></li>
+                <li class="feed-item"><span class="feed-time">14:31:30</span><span class="feed-status status-transit">IN TRANSIT</span><span class="feed-detail"><strong>Unit D-1056</strong> — Crossing Suez checkpoint</span></li>
+            </ul>
+        </div>
+    </section>
+    <footer>
+        <div class="footer-grid">
+            <div class="footer-col"><h4>Platform</h4><ul><li><a href="#">Overview</a></li><li><a href="#">API Docs</a></li><li><a href="#">SDK</a></li><li><a href="#">Status</a></li></ul></div>
+            <div class="footer-col"><h4>Solutions</h4><ul><li><a href="#">Freight</a></li><li><a href="#">Warehousing</a></li><li><a href="#">Last Mile</a></li><li><a href="#">Cold Chain</a></li></ul></div>
+            <div class="footer-col"><h4>Company</h4><ul><li><a href="#">About</a></li><li><a href="#">Careers</a></li><li><a href="#">Press</a></li><li><a href="#">Contact</a></li></ul></div>
+            <div class="footer-col"><h4>Connect</h4><ul><li><a href="#">Twitter</a></li><li><a href="#">LinkedIn</a></li><li><a href="#">GitHub</a></li><li><a href="#">Discord</a></li></ul></div>
+        </div>
+        <div class="footer-bottom"><div class="footer-logo">NEXUS<span>//</span>LOGISTICS</div><span>© 2026 Nexus Logistics Network. Secure channel — TLS 1.3</span></div>
+    </footer>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+    <script>
+        (function() {
+            const canvas = document.getElementById('particleCanvas');
+            const ctx = canvas.getContext('2d');
+            let particles = []; const maxParticles = 120; const connectionDist = 140;
+            function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+            resize(); window.addEventListener('resize', resize);
+            class Particle {
+                constructor() { this.reset(); }
+                reset() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height; this.vx = (Math.random()-0.5)*0.35; this.vy = (Math.random()-0.5)*0.35; this.radius = Math.random()*1.6+0.5; this.opacity = Math.random()*0.5+0.2; }
+                update() { this.x+=this.vx; this.y+=this.vy; if(this.x<-20)this.x=canvas.width+20; if(this.x>canvas.width+20)this.x=-20; if(this.y<-20)this.y=canvas.height+20; if(this.y>canvas.height+20)this.y=-20; }
+                draw() { ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=`rgba(0,212,255,${this.opacity})`; ctx.fill(); }
+            }
+            for(let i=0;i<maxParticles;i++) particles.push(new Particle());
+            function drawConnections() {
+                for(let i=0;i<particles.length;i++) for(let j=i+1;j<particles.length;j++) {
+                    const dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y, dist=Math.sqrt(dx*dx+dy*dy);
+                    if(dist<connectionDist) { const a=(1-dist/connectionDist)*0.12; ctx.beginPath(); ctx.moveTo(particles[i].x,particles[i].y); ctx.lineTo(particles[j].x,particles[j].y); ctx.strokeStyle=`rgba(0,212,255,${a})`; ctx.lineWidth=0.5; ctx.stroke(); }
+                }
+            }
+            function animate() { ctx.clearRect(0,0,canvas.width,canvas.height); particles.forEach(p=>{p.update();p.draw();}); drawConnections(); requestAnimationFrame(animate); }
+            animate();
+        })();
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        gsap.registerPlugin(ScrollTrigger);
+        const truckCanvas=document.getElementById('truckCanvas'), truckStage=document.getElementById('truckStage');
+        const renderer=new THREE.WebGLRenderer({canvas:truckCanvas,antialias:true,alpha:true});
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+        renderer.shadowMap.enabled=true; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.2;
+        const scene=new THREE.Scene();
+        const camera=new THREE.PerspectiveCamera(42,2,0.5,60); camera.position.set(3.5,2.2,6.5); camera.lookAt(0,0.15,0);
+        function resizeThree() { const r=truckStage.getBoundingClientRect(); renderer.setSize(r.width,r.height,false); camera.aspect=r.width/Math.max(r.height,1); camera.updateProjectionMatrix(); }
+        resizeThree(); window.addEventListener('resize',resizeThree);
+        const ambientLight=new THREE.AmbientLight('#1a2a3a',1.8); scene.add(ambientLight);
+        const keyLight=new THREE.DirectionalLight('#ffffff',3.5); keyLight.position.set(8,10,5); keyLight.castShadow=true; scene.add(keyLight);
+        const rimLight=new THREE.DirectionalLight('#00d4ff',2.5); rimLight.position.set(-3,1,-3); scene.add(rimLight);
+        const fillLight=new THREE.DirectionalLight('#f0a500',1.0); fillLight.position.set(2,0.5,0); scene.add(fillLight);
+        const gridHelper=new THREE.PolarGridHelper(8,32,24,128,'#0a1a2a','#0a1a2a'); gridHelper.position.y=-1.8; scene.add(gridHelper);
+        const matWireframe=new THREE.MeshBasicMaterial({color:'#00d4ff',wireframe:true,transparent:true,opacity:1.0});
+        const matSolidBody=new THREE.MeshStandardMaterial({color:'#1a1a2e',roughness:0.35,metalness:0.75,transparent:true,opacity:0.0});
+        const matSolidAccent=new THREE.MeshStandardMaterial({color:'#f0a500',roughness:0.3,metalness:0.85,transparent:true,opacity:0.0});
+        const matSolidDark=new THREE.MeshStandardMaterial({color:'#0d0d18',roughness:0.5,metalness:0.6,transparent:true,opacity:0.0});
+        const matSolidWheel=new THREE.MeshStandardMaterial({color:'#111122',roughness:0.55,metalness:0.5,transparent:true,opacity:0.0});
+        const matSolidGlass=new THREE.MeshStandardMaterial({color:'#1a3a4a',roughness:0.15,metalness:0.1,transparent:true,opacity:0.0});
+        const allSolidMats=[matSolidBody,matSolidAccent,matSolidDark,matSolidWheel,matSolidGlass];
+        const truckRoot=new THREE.Group();
+        function addPart(geo,x,y,z,rx,ry,rz) {
+            const g=new THREE.Group(); const w=new THREE.Mesh(geo,matWireframe); w.position.set(x,y,z); if(rx||ry||rz) w.rotation.set(rx||0,ry||0,rz||0); w.castShadow=true; g.add(w);
+            const s=new THREE.Mesh(geo,matSolidBody); s.position.set(x,y,z); if(rx||ry||rz) s.rotation.set(rx||0,ry||0,rz||0); s.castShadow=true; g.add(s);
+            truckRoot.add(g); return g;
+        }
+        // Simplified truck - cab, chassis, container, wheels
+        addPart(new THREE.BoxGeometry(1.15,0.85,1.3),0,0.55,1.15);
+        addPart(new THREE.BoxGeometry(1.05,0.38,0.75),0,0.12,1.75);
+        addPart(new THREE.BoxGeometry(0.95,0.14,1.1),0,1.02,1.15);
+        addPart(new THREE.BoxGeometry(0.5,0.14,5.8),0,-0.32,-1.0);
+        addPart(new THREE.BoxGeometry(1.2,0.12,0.22),0,-0.2,2.0);
+        addPart(new THREE.BoxGeometry(1.6,1.45,4.2),0,0.6,-2.2);
+        addPart(new THREE.BoxGeometry(0.4,0.1,3.8),0,-0.28,-2.2);
+        // Wheels
+        function addWheel(x,z) { const g=new THREE.Group(); const w=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.28,24),matWireframe); w.rotation.x=Math.PI/2; w.position.set(x,-0.32,z); g.add(w); const s=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.28,24),matSolidWheel); s.rotation.x=Math.PI/2; s.position.set(x,-0.32,z); g.add(s); truckRoot.add(g); return g; }
+        for(const x of[-0.72,0.72]) for(const z of[1.55,0.65,0.25]) addWheel(x,z);
+        for(const x of[-0.78,0.78]) for(const z of[-3.8,-4.3]) addWheel(x,z);
+        scene.add(truckRoot);
+        // Scan rings
+        const sr1=new THREE.Mesh(new THREE.TorusGeometry(2.1,0.02,16,80),new THREE.MeshBasicMaterial({color:'#00d4ff',transparent:true,opacity:0.6})); sr1.position.y=0.3; scene.add(sr1);
+        const sr2=new THREE.Mesh(new THREE.TorusGeometry(2.5,0.015,12,64),new THREE.MeshBasicMaterial({color:'#f0a500',transparent:true,opacity:0.35})); sr2.position.y=0.3; sr2.rotation.x=Math.PI/2.5; scene.add(sr2);
+        // Animate
+        const clock=new THREE.Clock();
+        function animate() { requestAnimationFrame(animate); const t=clock.getElapsedTime(); sr1.rotation.z+=0.004; sr1.rotation.x=Math.sin(t*0.5)*0.3; sr2.rotation.z-=0.003; sr2.rotation.y+=0.005; truckRoot.position.y=Math.sin(t*0.8)*0.1; renderer.render(scene,camera); }
+        animate();
+        // ScrollTrigger: Wireframe → Solid
+        ScrollTrigger.create({trigger:'#hero',start:'top top',end:'bottom center',scrub:1.2,onUpdate:self=>{const p=self.progress; matWireframe.opacity=1-p; allSolidMats.forEach(m=>{m.opacity=p;}); sr1.material.opacity=0.6*(1-p*0.6); sr2.material.opacity=0.35*(1-p*0.6); camera.position.z=6.5-p*1.8; camera.position.y=2.2-p*0.6; camera.lookAt(0,0.15,0);}});
+        // ScrollTrigger: Feature cards
+        document.querySelectorAll('.feature-card').forEach((c,i)=>{gsap.fromTo(c,{opacity:0,y:50,scale:0.94},{opacity:1,y:0,scale:1,duration:0.8,ease:'power3.out',scrollTrigger:{trigger:c,start:'top bottom-=80px',toggleActions:'play none none reverse'},delay:i*0.1});});
+        // ScrollTrigger: Counters
+        document.querySelectorAll('.counter').forEach(el=>{const t=parseInt(el.getAttribute('data-target'),10);ScrollTrigger.create({trigger:el,start:'top bottom-=60px',onEnter:()=>{gsap.to(el,{innerText:t,duration:2.2,ease:'power2.out',snap:{innerText:1},onUpdate:function(){el.textContent=Math.round(this.targets()[0].innerText).toLocaleString();}});},once:true});});
+        // Live feed
+        const feedList=document.getElementById('feedList'), hubs=['Rotterdam Hub','Singapore Port','LAX Gateway','Dubai Nexus','Shanghai Terminal','Hamburg Dock','Tokyo Cargo','Sao Paulo Depot','Mumbai Center','Sydney Port','Cape Town Yard','Vancouver Terminal'];
+        setInterval(()=>{const n=new Date(),t=`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}:${String(n.getSeconds()).padStart(2,'0')}`;
+        const s=['IN TRANSIT','DELIVERED','PROCESSING'][Math.floor(Math.random()*3)],c=['status-transit','status-delivered','status-processing'][Math.floor(Math.random()*3)];
+        const ul=['A','B','C','D'][Math.floor(Math.random()*4)],un=String(Math.floor(Math.random()*9000)+1000),hb=hubs[Math.floor(Math.random()*hubs.length)];
+        const li=document.createElement('li');li.className='feed-item';li.innerHTML=`<span class="feed-time">${t}</span><span class="feed-status ${c}">${s}</span><span class="feed-detail"><strong>Unit ${ul}-${un}</strong> — Departed ${hb}</span>`;
+        li.style.opacity='0';li.style.transform='translateX(-20px)';feedList.insertBefore(li,feedList.firstChild);
+        gsap.to(li,{opacity:1,x:0,duration:0.5,ease:'power2.out'});
+        while(feedList.children.length>8){gsap.to(feedList.lastChild,{opacity:0,height:0,padding:0,margin:0,duration:0.4,onComplete:()=>feedList.lastChild.remove()});}},2800);
+    </script>
+</body>
+</html>

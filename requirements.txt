@@ -1,0 +1,8 @@
+# Echtzeit-App (v3): aiohttp für SSE-Consumer + HTTP + WebSocket.
+aiohttp>=3.9
+
+# Terminal-Client: rich für farbige Live-Tabellen (optional, Plain-Text-Fallback).
+rich>=13.0
+
+# v2-Fallback-Skript (tdf_tracker.py) braucht requests.
+requests>=2.28

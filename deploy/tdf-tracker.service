@@ -1,0 +1,51 @@
+# systemd-Unit für den TdF Live Tracker (v3, aiohttp).
+#
+# Installation:
+#   sudo cp tdf-tracker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now tdf-tracker
+#   sudo journalctl -u tdf-tracker -f        # Log verfolgen
+#
+# Vorher anpassen:
+#   * WorkingDirectory = Pfad zum Repo (hier /opt/tdf-tracker)
+#   * ExecStart-Python = Pfad zum python3 mit installiertem aiohttp
+#   * TDF_TOKEN        = langes, zufälliges Token (z. B. `openssl rand -hex 24`)
+#
+# Damit /api/control?action=restart aus dem laufenden Dienst heraus funktioniert
+# (der Dienst restartet sich selbst via systemctl), braucht der Service das
+# Recht dazu. Zwei Optionen, siehe README „polkit":
+#   1) Eine polkit-Regel, die dem Dienst-User genau diese Aktion erlaubt, oder
+#   2) der Dienst läuft als User mit weitreichenden Rechten (nicht empfohlen).
+
+[Unit]
+Description=TdF Live Tracker (v3 aiohttp)
+Documentation=file:///opt/tdf-tracker/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tdf-tracker
+ExecStart=/usr/bin/python3 -m tdf.server --year 2026 --port 8000
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Konfiguration via ENV (siehe tdf/config.py).
+Environment=TDF_TOKEN=CHANGE_ME
+Environment=TDF_JSONL_PATH=/var/lib/tdf-tracker/live.jsonl
+Environment=TDF_SERVICE_NAME=tdf-tracker
+
+# Sanfthes Hardening (optional, einkommentieren wenn gewünscht):
+# User=tdf
+# Group=tdf
+# NoNewPrivileges=true
+# ProtectSystem=strict
+# ProtectHome=true
+# PrivateTmp=true
+# ReadWritePaths=/var/lib/tdf-tracker
+# StateDirectory=tdf-tracker
+
+[Install]
+WantedBy=multi-user.target

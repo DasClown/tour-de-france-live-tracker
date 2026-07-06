@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS FREIGHT — Autonomous Logistics</title>
+<style>
+:root{
+  --bg:#05070d;
+  --panel:rgba(15,22,38,0.45);
+  --accent:#00e5ff;
+  --accent2:#ff007a;
+  --text:#dfe8f5;
+  --muted:#7d8ba8;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  overflow-x:hidden;
+}
+#particles{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  z-index:0;
+}
+.overlay-grid{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:
+    linear-gradient(rgba(0,229,255,0.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,229,255,0.03) 1px,transparent 1px);
+  background-size:50px 50px;
+  z-index:1;pointer-events:none;
+}
+nav{
+  position:fixed;top:0;left:0;width:100%;z-index:100;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:18px 40px;
+  background:rgba(5,7,13,0.5);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(0,229,255,0.15);
+}
+.logo{
+  font-weight:800;letter-spacing:3px;font-size:1.3rem;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+nav ul{display:flex;gap:28px;list-style:none}
+nav a{color:var(--muted);text-decoration:none;font-size:.85rem;letter-spacing:1px;transition:.3s}
+nav a:hover{color:var(--accent)}
+section{position:relative;z-index:2}
+/* HERO */
+#hero{
+  min-height:100vh;display:flex;align-items:center;
+  padding:0 60px;position:relative;
+}
+#truck-canvas{
+  position:absolute;right:0;top:0;width:60%;height:100%;z-index:1;
+}
+.hero-text{position:relative;z-index:3;max-width:600px}
+.hero-text h1{
+  font-size:clamp(2.5rem,6vw,5rem);line-height:1;font-weight:900;
+  letter-spacing:-1px;margin-bottom:20px;
+}
+.hero-text h1 span{
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.hero-text p{color:var(--muted);font-size:1.15rem;margin-bottom:32px;max-width:460px}
+.btn{
+  display:inline-block;padding:16px 38px;
+  background:linear-gradient(90deg,var(--accent),#0077ff);
+  color:#02040a;font-weight:700;letter-spacing:1px;text-decoration:none;
+  border-radius:6px;transition:.3s;border:none;cursor:pointer;
+  box-shadow:0 0 30px rgba(0,229,255,0.4);
+}
+.btn:hover{transform:translateY(-3px);box-shadow:0 0 50px rgba(0,229,255,0.7)}
+.tag{
+  display:inline-block;font-size:.75rem;letter-spacing:3px;color:var(--accent);
+  border:1px solid rgba(0,229,255,0.3);padding:6px 14px;border-radius:20px;
+  margin-bottom:24px;background:rgba(0,229,255,0.05);
+}
+/* SECTION HEADERS */
+.sec-head{text-align:center;margin-bottom:60px}
+.sec-head h2{font-size:clamp(2rem,4vw,3rem);font-weight:800;letter-spacing:-1px}
+.sec-head h2 span{color:var(--accent)}
+.sec-head p{color:var(--muted);margin-top:12px}
+/* FEATURES */
+#features{padding:120px 60px}
+.grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:28px;
+  max-width:1200px;margin:0 auto;
+}
+.card{
+  background:var(--panel);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid rgba(0,229,255,0.12);
+  border-radius:16px;padding:34px;transition:.4s;
+}
+.card:hover{
+  transform:translateY(-8px);
+  border-color:rgba(0,229,255,0.5);
+  box-shadow:0 20px 50px rgba(0,0,0,0.5);
+}
+.card .ico{
+  font-size:2.4rem;margin-bottom:18px;
+  filter:drop-shadow(0 0 12px var(--accent));
+}
+.card h3{font-size:1.3rem;margin-bottom:12px}
+.card p{color:var(--muted);font-size:.95rem;line-height:1.6}
+/* DASHBOARD */
+#dashboard{padding:120px 60px;background:rgba(8,12,22,0.4)}
+.dash-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;
+  max-width:1200px;margin:0 auto;
+}
+.stat{
+  background:var(--panel);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid rgba(0,229,255,0.12);
+  border-radius:16px;padding:30px;position:relative;overflow:hidden;
+}
+.stat::before{
+  content:'';position:absolute;top:0;left:0;width:4px;height:100%;
+  background:linear-gradient(var(--accent),var(--accent2));
+}
+.stat .label{color:var(--muted);font-size:.8rem;letter-spacing:2px;text-transform:uppercase}
+.stat .val{font-size:2.6rem;font-weight:800;margin:10px 0;color:var(--accent)}
+.stat .delta{font-size:.85rem;color:#3affaa}
+.bar-wrap{margin-top:16px;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden}
+.bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0}
+/* FOOTER */
+footer{
+  padding:60px;text-align:center;position:relative;z-index:2;
+  border-top:1px solid rgba(0,229,255,0.15);
+  background:rgba(5,7,13,0.6);backdrop-filter:blur(14px);
+}
+footer .logo{margin-bottom:18px}
+footer p{color:var(--muted);font-size:.85rem}
+.footer-links{display:flex;gap:24px;justify-content:center;margin:20px 0}
+.footer-links a{color:var(--muted);text-decoration:none;font-size:.85rem;transition:.3s}
+.footer-links a:hover{color:var(--accent)}
+@media(max-width:768px){
+  #truck-canvas{width:100%;opacity:.3}
+  nav ul{display:none}
+  #hero,#features,#dashboard{padding-left:24px;padding-right:24px}
+}
+</style>
+</head>
+<body>
+<canvas id="particles"></canvas>
+<div class="overlay-grid"></div>
+
+<nav>
+  <div class="logo">NEXUS<span style="color:var(--accent2)">◆</span>FREIGHT</div>
+  <ul>
+    <li><a href="#hero">Home</a></li>
+    <li><a href="#features">Systems</a></li>
+    <li><a href="#dashboard">Live Ops</a></li>
+    <li><a href="#footer">Contact</a></li>
+  </ul>
+</nav>
+
+<section id="hero">
+  <canvas id="truck-canvas"></canvas>
+  <div class="hero-text">
+    <span class="tag">◇ AUTONOMOUS FLEET NETWORK</span>
+    <h1>Freight at the <span>Speed of Data</span></h1>
+    <p>Real-time AI routing, self-driving cargo units, and quantum-secure supply chains. The logistics grid, reimagined for 2090.</p>
+    <a href="#dashboard" class="btn">Deploy Fleet →</a>
+  </div>
+</section>
+
+<section id="features">
+  <div class="sec-head">
+    <h2>Core <span>Systems</span></h2>
+    <p>Engineered for zero-latency global distribution</p>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="ico">⚡</div><h3>Neural Routing</h3><p>Adaptive pathfinding recalculates 40M routes per second, dodging congestion before it forms.</p></div>
+    <div class="card"><div class="ico">🛰️</div><h3>Orbital Tracking</h3><p>Sub-meter positioning via low-orbit mesh, delivering constant telemetry on every cargo unit.</p></div>
+    <div class="card"><div class="ico">🔐</div><h3>Quantum Ledger</h3><p>Tamper-proof chain-of-custody secured with post-quantum cryptography end to end.</p></div>
+    <div class="card"><div class="ico">🤖</div><h3>Autonomous Units</h3><p>Level-5 self-driving haulers with predictive maintenance and swarm coordination.</p></div>
+    <div class="card"><div class="ico">📡</div><h3>Edge Compute</h3><p>On-vehicle inference clusters process sensor data locally for millisecond decisions.</p></div>
+    <div class="card"><div class="ico">🌐</div><h3>Global Mesh</h3><p>Interconnected hubs across 190 regions, self-healing and infinitely scalable.</p></div>
+  </div>
+</section>
+
+<section id="dashboard">
+  <div class="sec-head">
+    <h2>Live <span>Operations</span></h2>
+    <p>Real-time metrics from the active fleet network</p>
+  </div>
+  <div class="dash-grid">
+    <div class="stat"><div class="label">Active Units</div><div class="val" data-target="1284">0</div><div class="delta">▲ 4.2% today</div><div class="bar-wrap"><div class="bar" data-w="78"></div></div></div>
+    <div class="stat"><div class="label">On-Time %</div><div class="val" data-target="99" data-suffix="%">0</div><div class="delta">▲ 0.8% today</div><div class="bar-wrap"><div class="bar" data-w="99"></div></div></div>
+    <div class="stat"><div class="label">Tonnage Moved</div><div class="val" data-target="847" data-suffix="K">0</div><div class="delta">▲ 12% this week</div><div class="bar-wrap"><div class="bar" data-w="64"></div></div></div>
+    <div class="stat"><div class="label">Avg Latency</div><div class="val" data-target="12" data-suffix="ms">0</div><div class="delta">▼ 3ms improved</div><div class="bar-wrap"><div class="bar" data-w="88"></div></div></div>
+  </div>
+</section>
+
+<footer id="footer">
+  <div class="logo">NEXUS<span style="color:var(--accent2)">◆</span>FREIGHT</div>
+  <div class="footer-links">
+    <a href="#">Privacy</a><a href="#">Terms</a><a href="#">API</a><a href="#">Careers</a><a href="#">Status</a>
+  </div>
+  <p>© 2090 Nexus Freight Systems. All logistics reserved. Powered by the Autonomous Grid.</p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+<script type="importmap">
+{
+  "imports":{
+    "three":"https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ===== PARTICLE BACKGROUND ===== */
+const pc = document.getElementById('particles');
+const pctx = pc.getContext('2d');
+let W,H,particles=[];
+function resize(){W=pc.width=innerWidth;H=pc.height=innerHeight;}
+resize();addEventListener('resize',resize);
+for(let i=0;i<120;i++){
+  particles.push({
+    x:Math.random()*W,y:Math.random()*H,
+    vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.4,
+    r:Math.random()*1.8+.4
+  });
+}
+function drawParticles(){
+  pctx.clearRect(0,0,W,H);
+  for(let p of particles){
+    p.x+=p.vx;p.y+=p.vy;
+    if(p.x<0||p.x>W)p.vx*=-1;
+    if(p.y<0||p.y>H)p.vy*=-1;
+    pctx.beginPath();pctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    pctx.fillStyle='rgba(0,229,255,0.6)';pctx.fill();
+  }
+  for(let i=0;i<particles.length;i++){
+    for(let j=i+1;j<particles.length;j++){
+      const a=particles[i],b=particles[j];
+      const d=Math.hypot(a.x-b.x,a.y-b.y);
+      if(d<120){
+        pctx.beginPath();pctx.moveTo(a.x,a.y);pctx.lineTo(b.x,b.y);
+        pctx.strokeStyle=`rgba(0,229,255,${0.12*(1-d/120)})`;
+        pctx.lineWidth=.5;pctx.stroke();
+      }
+    }
+  }
+  requestAnimationFrame(drawParticles);
+}
+drawParticles();
+
+/* ===== THREE.JS PROCEDURAL TRUCK ===== */
+const canvas=document.getElementById('truck-canvas');
+const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+function sizeRenderer(){
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;camera.updateProjectionMatrix();
+}
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(45,1,0.1,100);
+camera.position.set(6,3.5,8);
+camera.lookAt(0,0.5,0);
+
+// lights
+scene.add(new THREE.AmbientLight(0x223355,1.2));
+const key=new THREE.DirectionalLight(0x00e5ff,2.5);key.position.set(5,8,5);scene.add(key);
+const rim=new THREE.DirectionalLight(0xff007a,1.8);rim.position.set(-6,3,-4);scene.add(rim);
+const top=new THREE.PointLight(0xffffff,1.5,30);top.position.set(0,6,2);scene.add(top);
+
+const truck=new THREE.Group();
+
+const bodyMat=new THREE.MeshStandardMaterial({color:0x0d1526,metalness:.85,roughness:.3,emissive:0x001824,emissiveIntensity:.4});
+const cabMat=new THREE.MeshStandardMaterial({color:0x111c33,metalness:.9,roughness:.25});
+const glassMat=new THREE.MeshStandardMaterial({color:0x00e5ff,metalness:.4,roughness:.1,emissive:0x00b8d4,emissiveIntensity:.8,transparent:true,opacity:.7});
+const tireMat=new THREE.MeshStandardMaterial({color:0x0a0a0f,metalness:.3,roughness:.8});
+const rimMat=new THREE.MeshStandardMaterial({color:0x00e5ff,metalness:.9,roughness:.2,emissive:0x00e5ff,emissiveIntensity:.5});
+
+// trailer
+const trailer=new THREE.Mesh(new THREE.BoxGeometry(4.5,2.2,2.2),bodyMat);
+trailer.position.set(-1.2,1.4,0);truck.add(trailer);
+// glowing edges on trailer
+const edge=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(4.5,2.2,2.2)),new THREE.LineBasicMaterial({color:0x00e5ff}));
+edge.position.copy(trailer.position);truck.add(edge);
+
+// cab
+const cab=new THREE.Mesh(new THREE.BoxGeometry(1.6,1.7,2.1),cabMat);
+cab.position.set(2.1,1.15,0);truck.add(cab);
+// cab top slope
+const nose=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.9,2.1),cabMat);
+nose.position.set(2.9,0.75,0);truck.add(nose);
+// windshield
+const glass=new THREE.Mesh(new THREE.BoxGeometry(0.15,1,1.9),glassMat);
+glass.position.set(2.95,1.4,0);truck.add(glass);
+// headlights
+[-1,1].forEach(s=>{
+  const hl=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.1,16),new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xffffff,emissiveIntensity:2}));
+  hl.rotation.z=Math.PI/2;hl.position.set(3.55,0.6,s*0.7);truck.add(hl);
+});
+
+// wheels
+function wheel(x,z){
+  const g=new THREE.Group();
+  const t=new THREE.Mesh(new THREE.TorusGeometry(0.55,0.25,12,24),tireMat);
+  const r=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.35,8),rimMat);
+  r.rotation.x=Math.PI/2;
+  g.add(t);g.add(r);
+  g.position.set(x,0.55,z);g.rotation.y=Math.PI/2;
+  return g;
+}
+const wheels=[];
+[[2.3,1.1],[2.3,-1.1],[-0.3,1.1],[-0.3,-1.1],[-2.4,1.1],[-2.4,-1.1]].forEach(([x,z])=>{
+  const w=wheel(x,z);wheels.push(w);truck.add(w);
+});
+
+truck.position.y=-0.3;
+scene.add(truck);
+
+// ground reflection glow ring
+const ring=new THREE.Mesh(new THREE.RingGeometry(3,6,48),new THREE.MeshBasicMaterial({color:0x00e5ff,transparent:true,opacity:.06,side:THREE.DoubleSide}));
+ring.rotation.x=-Math.PI/2;ring.position.y=-0.35;scene.add(ring);
+
+sizeRenderer();
+addEventListener('resize',sizeRenderer);
+
+let scrollRot=0;
+addEventListener('scroll',()=>{scrollRot=window.scrollY*0.0015;});
+
+const clock=new THREE.Clock();
+function animate(){
+  const t=clock.getElapsedTime();
+  truck.rotation.y=0.4+Math.sin(t*0.3)*0.15+scrollRot;
+  truck.position.y=-0.3+Math.sin(t*0.8)*0.08;
+  wheels.forEach(w=>w.children[0].rotation.z-=0.06);
+  renderer.render(scene,camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+/* ===== GSAP SCROLL ANIMATIONS ===== */
+gsap.registerPlugin(ScrollTrigger);
+
+gsap.from('.hero-text .tag',{opacity:0,y:30,duration:.8,delay:.2});
+gsap.from('.hero-text h1',{opacity:0,y:40,duration:1,delay:.4});
+gsap.from('.hero-text p',{opacity:0,y:30,duration:.8,delay:.7});
+gsap.from('.hero-text .btn',{opacity:0,y:20,duration:.8,delay:.9});
+
+gsap.utils.toArray('.card').forEach((c,i)=>{
+  gsap.from(c,{
+    opacity:0,y:60,duration:.7,
+    scrollTrigger:{trigger:c,start:'top 88%'},
+    delay:(i%3)*0.1
+  });
+});
+
+gsap.from('#features .sec-head',{opacity:0,y:40,duration:.8,scrollTrigger:{trigger:'#features',start:'top 80%'}});
+gsap.from('#dashboard .sec-head',{opacity:0,y:40,duration:.8,scrollTrigger:{trigger:'#dashboard',start:'top 80%'}});
+
+document.querySelectorAll('.stat').forEach((stat,i)=>{
+  gsap.from(stat,{opacity:0,y:50,duration:.7,scrollTrigger:{trigger:stat,start:'top 88%'},delay:i*0.1});
+  const val=stat.querySelector('.val');
+  const target=+val.dataset.target;
+  const suffix=val.dataset.suffix||'';
+  const bar=stat.querySelector('.bar');
+  ScrollTrigger.create({
+    trigger:stat,start:'top 85%',once:true,
+    onEnter:()=>{
+      gsap.to(val,{textContent:target,duration:2,snap:{textContent:1},
+        onUpdate:function(){val.textContent=Math.round(val.textContent)+suffix;}});
+      gsap.to(bar,{width:bar.dataset.w+'%',duration:1.6,ease:'power2.out'});
+    }
+  });
+});
+</script>
+</body>
+</html>

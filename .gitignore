@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+*,cover
+.hypothesis/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs & lokale Runtime-Daten
+*.log
+*.jsonl
+*.jsonl.archive.*
+live.jsonl*
+/var/
+
+# Lokale Konfiguration / Secrets — NIEMALS committen!
+.env
+.env.*
+!.env.example
+*.token
+.tdf-tracker-token
+secrets.json
+
+# OS-spezifisch
+.DS_Store
+ehthumbs.db

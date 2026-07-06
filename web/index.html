@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0c10">
+  <title>TdF Live – Tracker</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin="">
+</head>
+<body>
+  <!-- Partikel-Hintergrund Canvas -->
+  <canvas id="particle-canvas"></canvas>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="title">
+      <span class="logo">🚴</span>
+      <span id="stage-label">Tour de France</span>
+    </div>
+    <div class="status" id="sse-indicator">
+      <span id="status-pill" class="pill pill--idle">…</span>
+      <span id="freshness" class="freshness"></span>
+      <span id="sse-dot" class="sse-dot sse-dot--off" title="Verbindung">⬤</span>
+    </div>
+  </header>
+
+  <!-- Status Quo Header – immer sichtbar -->
+  <div class="status-quo glass" id="status-quo">
+    <div class="sq-row sq-row--main">
+      <div class="sq-stage">
+        <span class="sq-label">Etappe</span>
+        <span class="sq-value" id="sq-stage">–</span>
+      </div>
+      <div class="sq-status-badge" id="sq-status-badge">
+        <span class="sq-label">Status</span>
+        <span class="sq-pill" id="sq-pill">…</span>
+      </div>
+      <div class="sq-freshness">
+        <span class="sq-label">Letztes Update</span>
+        <span class="sq-value" id="sq-freshness">–</span>
+      </div>
+      <div class="sq-next">
+        <span class="sq-label">Nächste Etappe</span>
+        <span class="sq-value" id="sq-next">–</span>
+      </div>
+    </div>
+    <div class="sq-row sq-row--stats" id="sq-stats">
+      <div class="sq-stat glass sq-stat--rider">
+        <span class="sq-stat__value" id="sq-rider-count">0</span>
+        <span class="sq-stat__label">Fahrer im Feld</span>
+      </div>
+      <div class="sq-stat glass sq-stat--groups">
+        <span class="sq-stat__value" id="sq-group-count">0</span>
+        <span class="sq-stat__label">Gruppen</span>
+      </div>
+      <div class="sq-stat glass sq-stat--gc">
+        <span class="sq-stat__value" id="sq-gc-leader">–</span>
+        <span class="sq-stat__label">GC-Führer</span>
+      </div>
+      <div class="sq-stat glass sq-stat--gap">
+        <span class="sq-stat__value" id="sq-gc-gap">–</span>
+        <span class="sq-stat__label">Vorsprung</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Control bar -->
+  <div class="ctrlbar" id="ctrlbar" hidden>
+    <button class="btn btn--ok"    data-action="restart" title="Dienst neu starten">↻ Restart</button>
+    <button class="btn btn--warn"  data-action="stop"    title="Dienst anhalten">■ Stop</button>
+    <button class="btn btn--ok"    data-action="start"   title="Dienst starten">▶ Start</button>
+    <span class="ctrl-state" id="ctrl-state">● Zustand …</span>
+    <a class="btn btn--ghost" href="/api/trail?n=20" target="_blank" rel="noopener">Trail</a>
+  </div>
+
+  <!-- Auth bar -->
+  <div class="authbar" id="authbar" hidden>
+    <span>Token eingeben:</span>
+    <input id="token-input" type="password" placeholder="TDF_TOKEN"
+           autocomplete="off">
+    <button class="btn btn--ghost" id="token-save">Speichern</button>
+  </div>
+
+  <main class="layout">
+    <section class="map-col">
+      <div id="map" role="img" aria-label="Live-Karte"></div>
+    </section>
+
+    <section class="data-col">
+
+      <!-- Restzeit-Anzeige -->
+      <div class="restzeit glass" id="restzeit" hidden>
+        <div class="restzeit__inner">
+          <span class="restzeit__label">Geschätzte Zielankunft</span>
+          <span class="restzeit__value" id="restzeit-value">–</span>
+          <span class="restzeit__sub" id="restzeit-sub"></span>
+        </div>
+      </div>
+
+      <!-- Trikots -->
+      <div class="jerseys" id="jerseys" aria-label="Trikotträger"></div>
+
+      <!-- Top-Favoriten -->
+      <h2 class="section-h">Top-Favoriten <span class="muted">(Virtual-GC-Top-10)</span></h2>
+      <div class="cards glass" id="top-cards"></div>
+
+      <!-- Gap-Chart -->
+      <h2 class="section-h" id="gap-chart-h" hidden>Lücken<span class="muted" id="gap-chart-groups-info"></span></h2>
+      <div class="gap-chart glass" id="gap-chart" hidden></div>
+
+      <!-- GC-Tabelle -->
+      <h2 class="section-h">Gesamtwertung <span class="muted">(Virtual GC)</span></h2>
+      <div class="table-wrap glass">
+        <table id="gc-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Bib</th><th>Name</th><th>Team</th>
+              <th class="num">Rückstand</th>
+            </tr>
+          </thead>
+          <tbody id="gc-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Gruppen -->
+      <h2 class="section-h">Live-Gruppen</h2>
+      <div class="groups glass" id="groups"></div>
+
+      <!-- Berg/Sprint-Panel -->
+      <div class="cps glass" id="cps" hidden>
+        <h2 class="section-h">Berg- & Sprint-Wertungen <span class="muted" id="cp-info"></span></h2>
+        <div id="cp-list"></div>
+      </div>
+
+      <!-- Alarm-Panel -->
+      <div class="alarms glass" id="alarms" hidden>
+        <h2 class="section-h">Alarme & Ereignisse</h2>
+        <div id="alarm-list"></div>
+      </div>
+
+    </section>
+  </main>
+
+  <footer class="footer glass">
+    <span id="last-update"></span>
+    <span class="muted">Daten: racecenter.letour.fr (inoffiziell)</span>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          crossorigin=""></script>
+  <script src="/app.js"></script>
+</body>
+</html>
