@@ -55,57 +55,104 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 # SSE-Consumer
 # --------------------------------------------------------------------------- #
 async def consume_sse(app: web.Application) -> None:
-    """Dauerhafte SSE-Verbindung; Dispatch bei jedem 'update'-Event."""
+    """Dauerhafte SSE-Verbindung; Dispatch bei jedem 'update'-Event.
+
+    Robustheit:
+      - sock_read Timeout (30s): wenn ASO lange still bleibt, reconnecten.
+        In Live-Phasen sendet ASO ~alle 1-5s Events; 30s Stille = Problem.
+      - explizite app["stopping"]-Prüfung im Lese-Loop.
+      - ausführliche Logs bei Verbindungsabbruch (vormals zu still).
+    """
     state: st.State = app["state"]
     session: aiohttp.ClientSession = app["http_session"]
     year = state.year
     stage = state.stage
     next_stage = (stage + 1) if stage else None
     backoff = 1
+    # sock_read: ASO schickt kontinuierlich Chunks (200+ in 0.1s während
+    # Live-Phase). Ein Timeout hier ist kontraproduktiv — es würde die
+    # stabile Verbindung kappen. Wir trusten dem Watchdog im heartbeat_loop,
+    # der den Task neu startet, falls er doch mal stirbt.
+    sse_read_timeout = cfg.SSE_READ_TIMEOUT_S  # Default: None (unendlich)
 
     while not app["stopping"]:
         try:
             timeout = aiohttp.ClientTimeout(
                 total=None,
                 connect=cfg.SSE_CONNECT_TIMEOUT_S,
-                sock_read=cfg.SSE_READ_TIMEOUT_S,
+                sock_read=sse_read_timeout,
             )
             async with session.get(cfg.LIVE_STREAM, headers=cfg.SSE_HEADERS,
                                    timeout=timeout) as resp:
                 resp.raise_for_status()
-                log.info("SSE verbunden (HTTP %d)", resp.status)
+                log.info("SSE verbunden (HTTP %d, sock_read=%.0fs)",
+                         resp.status, sse_read_timeout)
                 backoff = 1
+                # ⚠️ WICHTIG: aiohttp liefert resp.content als Byte-Stream in
+                # kleinen Chunks (oft nur 9-70 Bytes), NICHT als Zeilen.
+                # Eine einzelne SSE-`data:`-Zeile kann 45 KB groß sein (alle
+                # Riders eines telemetryCompetitor-Events) und über tausende
+                # Chunks verteilt sein. Deshalb: Chunks in einem Puffer
+                # sammeln und auf Leerzeile (Event-Grenze) splitten.
+                buffer = ""
                 event_name: str | None = None
+                event_data_lines: list[str] = []
                 async for raw in resp.content:
+                    if app["stopping"]:
+                        return
                     if not raw:
                         continue
-                    line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-                    if line == "":
-                        event_name = None
-                        continue
-                    if line.startswith("event:"):
-                        event_name = line[6:].strip()
-                    elif line.startswith("data:") and event_name == "update":
-                        try:
-                            msg = json.loads(line[5:].lstrip())
-                        except json.JSONDecodeError:
+                    buffer += raw.decode("utf-8", errors="replace")
+                    # Vollständige Zeilen aus dem Puffer extrahieren.
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.rstrip("\r")
+                        if line == "":
+                            # Event-Grenze: auswerten, falls update.
+                            if event_name == "update" and event_data_lines:
+                                data_str = "\n".join(event_data_lines)
+                                try:
+                                    msg = json.loads(
+                                        data_str[5:].lstrip()
+                                        if data_str.startswith("data:")
+                                        else data_str)
+                                except json.JSONDecodeError:
+                                    pass
+                                else:
+                                    changed = False
+                                    async with state.lock:
+                                        if (msg.get("bind") == cfg.bind_telemetry(year)
+                                                and state.telemetry.bootstrapped):
+                                            state.telemetry.bootstrapped = False
+                                        changed = st.dispatch(
+                                            msg, state, year=year,
+                                            stage=stage, next_stage=next_stage)
+                                        if changed and msg.get("bind") == cfg.bind_telemetry(year):
+                                            ex.reanchor_on_tick(
+                                                state.extrapolated_pos,
+                                                state.telemetry.riders,
+                                                state.top_n)
+                                    if changed:
+                                        await state.notify()
+                            # Puffer für nächstes Event zurücksetzen.
+                            event_name = None
+                            event_data_lines = []
                             continue
-                        changed = False
-                        async with state.lock:
-                            # Sobald ein echtes Telemetrie-Event kommt, ist der
-                            # Bootstrap-Wert nicht mehr maßgeblich.
-                            if (msg.get("bind") == cfg.bind_telemetry(year)
-                                    and state.telemetry.bootstrapped):
-                                state.telemetry.bootstrapped = False
-                            changed = st.dispatch(msg, state, year=year,
-                                                  stage=stage, next_stage=next_stage)
-                            if changed and msg.get("bind") == cfg.bind_telemetry(year):
-                                ex.reanchor_on_tick(state.extrapolated_pos,
-                                                    state.telemetry.riders,
-                                                    state.top_n)
-                        if changed:
-                            await state.notify()
-        except (aiohttp.ClientError, asyncio.TimeoutError, ConnectionError) as e:
+                        if line.startswith("event:"):
+                            event_name = line[6:].strip()
+                        elif line.startswith("data:"):
+                            event_data_lines.append(line)
+                        elif line.startswith("id:"):
+                            pass  # Last-Event-ID, derzeit nicht genutzt
+        except asyncio.TimeoutError:
+            if app["stopping"]:
+                return
+            # sock_read Timeout: ASO war 30s still. Reconnect mit kurzem Backoff
+            # (kein exponentiell, weil das ein erwartetes „warmes" Reconnect ist).
+            log.info("SSE sock_read Timeout (30s still); Reconnect in 1s")
+            await asyncio.sleep(1)
+            backoff = 1
+        except (aiohttp.ClientError, ConnectionError) as e:
             if app["stopping"]:
                 return
             log.warning("SSE-Verbindung verloren (%s: %s); Reconnect in %ds",
@@ -153,16 +200,53 @@ async def heartbeat_loop(app: web.Application) -> None:
     """Periodischer Herzschlag: schreibt Trail + benachrichtigt WS-Clients,
     auch wenn gerade keine SSE-Updates kommen (post-race, Verbindungsstress).
 
-    Läuft immer – unabhängig vom RaceStatus – damit Monitoring/Trail verlässlich
-    den letzten Stand sehen und verbundene Browser regelmäßig Auffrischung
-    bekommen (z. B. die „Alter der Daten“-Anzeige).
+    Zusätzlich: SSE-Watchdog mit Staleness-Erkennung.
+      1. Task beendet (done)? -> neu starten.
+      2. Task hängt (nicht done, aber keine Telemetrie seit >90s)? -> canceln
+         und neu starten. Das ist der wichtige Fall: der Task kann im
+         ``async for raw in resp.content`` blocken, ohne dass ``sock_read``
+         greift (ASO schickt Keep-Alive-Pings, die den Read-Timeout resetten,
+         aber keine echten Events). Wir trusten der Telemetrie-Aktualität
+         als Staleness-Indikator.
     """
     state: st.State = app["state"]
     # Etwas seltener als der Trail-Flush, aber mindestens alle 10s.
     interval = max(cfg.JSONL_FLUSH_EVERY_S, 5.0)
+    stale_threshold_s = 90.0  # keine Telemetrie seit >90s während Live-Rennen = Problem
     while not app["stopping"]:
         try:
             await asyncio.sleep(interval)
+            sse_task = app.get("sse_task")
+
+            # Fall 1: Task ist beendet (mit oder ohne Exception).
+            if sse_task is not None and sse_task.done():
+                exc = sse_task.exception() if not sse_task.cancelled() else None
+                if exc:
+                    log.error("SSE-Task gestorben (%s: %s) — starte neu",
+                              type(exc).__name__, exc)
+                else:
+                    log.warning("SSE-Task beendet (ohne Exception) — starte neu")
+                app["sse_task"] = asyncio.create_task(consume_sse(app))
+
+            # Fall 2: Task hängt noch (nicht done), aber keine Telemetrie mehr.
+            # Nur während live-Rennen relevant (vor Start gibt's legitimerweise
+            # lange keine Updates).
+            elif sse_task is not None and not sse_task.done():
+                last_tel = state.telemetry.timestamp
+                rs = state.telemetry.race_status
+                if rs is True and last_tel:
+                    age = time.time() - float(last_tel)
+                    if age > stale_threshold_s:
+                        log.warning(
+                            "SSE stale: keine Telemetrie seit %.0fs (RaceStatus=True) "
+                            "— cancelle Task und starte neu", age)
+                        sse_task.cancel()
+                        try:
+                            await sse_task
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                        app["sse_task"] = asyncio.create_task(consume_sse(app))
+
             async with state.lock:
                 state.evaluate_features()
             await state.notify(force=True)
