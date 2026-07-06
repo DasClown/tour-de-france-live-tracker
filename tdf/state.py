@@ -250,11 +250,21 @@ def parse_groups(data: dict) -> list[GroupInfo]:
         gap = g.get("computedRelative") if g.get("isComputedGap") else g.get("relative")
         lat = g.get("latitude")
         lon = g.get("longitude")
+        # size-Feld validieren: ASO liefert bei großen Gruppen (Peloton)
+        # manchmal den Dummy-Wert 999. In dem Fall nehmen wir die echte
+        # Anzahl der gelisteten Bibs, die zuverlässiger ist.
+        size_field = g.get("size")
+        if (not isinstance(size_field, int)
+                or size_field >= 200                  # 999-Dummy-Schwelle
+                or (bibs and abs(size_field - len(bibs)) > 50)):
+            size = len(bibs) if bibs else size_field
+        else:
+            size = size_field
         try:
             out.append(GroupInfo(
                 order=int(g.get("order", 0) or 0),
                 name=str(g.get("name", "?")),
-                size=int(g.get("size", len(bibs)) or len(bibs)),
+                size=int(size or len(bibs)),
                 speed=float(speed) if speed is not None else None,
                 remaining_km=float(rem) / 1000.0 if rem is not None else None,
                 gap_seconds=float(gap) if gap is not None else None,
@@ -315,23 +325,53 @@ def name_of(meta: dict[int, dict[str, Any]], bib: int) -> str:
 
 
 def apply_telemetry(state: State, data: dict, *, from_bootstrap: bool = False) -> None:
-    """Merge neuer Telemetrie-Snapshot in den Zustand."""
+    """Merge neuer Telemetrie-Snapshot in den Zustand.
+
+    Zusätzlich: Ableitung von Abreisern (withdrawals). ASO liefert den
+    stageWithdrawals-Bind während eines laufenden Rennens oft leer oder
+    unvollständig. Die zuverlässigste Quelle ist therefore der Diff zwischen
+    Starterfeld (state.meta) und aktueller Telemetrie: wer Starter ist, aber
+    nicht mehr in der Telemetrie auftaucht, hat aufgegeben.
+    """
     ts = data.get("TimeStamp")
     state.telemetry.race_status = data.get("RaceStatus")
     state.telemetry.stage_index = data.get("StageIndex")
     if ts is not None:
         state.telemetry.timestamp = ts
     state.telemetry.bootstrapped = from_bootstrap
+    # Riders im aktuellen Snapshot sammeln (für DNF-Ableitung).
+    seen_bibs: set[int] = set()
     # Defensiver Merge: nur enthaltene Rider überschreiben.
     for r in data.get("Riders") or []:
         bib = r.get("Bib")
         if isinstance(bib, int):
+            seen_bibs.add(bib)
             existing = state.telemetry.riders.get(bib, {})
             existing.update(r)
             if "_name" not in existing:
                 existing["_name"] = name_of(state.meta, bib)
             state.telemetry.riders[bib] = existing
     state.last_useful_update = time.time()
+
+    # DNF-Ableitung: Starter ohne Telemetrie = aufgegeben.
+    # Nur wenn wir ein Starterfeld haben (meta) und die Telemetrie substanziell
+    # ist (mind. 10 Rider, sonst falscher Alarm bei Telemetrie-Lücken).
+    if state.meta and len(seen_bibs) >= 10:
+        starter_bibs = set(state.meta.keys())
+        # Vorsichtig: nur Rider als DNF markieren, die WIRKLICH im Starterfeld
+        # waren und jetzt komplett fehlen. Rider, die im alten Snapshot da
+        # waren aber im neuen fehlen, könnten auch Telemetrie-Lücke sein.
+        # Daher: nur als DNF werten, wenn sie auch nicht schon kürzlich
+        # gesehen wurden (state.telemetry.riders behält alte Rider bei).
+        # Einfache robuste Heuristik: DNF = starter_bibs - seen_bibs,
+        # aber nur wenn diese Menge kleiner ist als 30% der Starter
+        # (sonst ist wahrscheinlich die Telemetrie kaputt, nicht der Rider).
+        dnf_candidates = starter_bibs - seen_bibs
+        if dnf_candidates and len(dnf_candidates) < len(starter_bibs) * 0.3:
+            state.withdrawals.update(dnf_candidates)
+            # Riders, die DNF sind, nicht mehr als „aktiv" propagieren.
+            for bib in dnf_candidates:
+                state.telemetry.riders.pop(bib, None)
 
 
 def apply_jerseys_ranking(state: State, data: dict) -> None:

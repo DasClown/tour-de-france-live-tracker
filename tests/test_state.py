@@ -109,14 +109,14 @@ class TestParseGroups:
             "computedRelative": 0,
             "isComputedGap": True,
             "latitude": 45.0, "longitude": 7.0,
-            "bibs": [{"bib": 1}, {"bib": 2}, {"bib": 3}],
+            "bibs": [{"bib": i} for i in range(1, 101)],  # 100 echte Bibs
         }]}
         out = st.parse_groups(data)
         assert len(out) == 1
         g = out[0]
         assert g.order == 0
         assert g.name == "Peloton"
-        assert g.size == 100
+        assert g.size == 100  # size stimmt, weil 100 echte Bibs da sind
         assert g.speed == 42.5
         assert g.gap_seconds == 0  # isComputedGap=True -> computedRelative genutzt
 
@@ -168,6 +168,34 @@ class TestParseGroups:
         }]}
         out = st.parse_groups(data)
         assert out[0].size == 2
+
+    def test_size_999_dummy_replaced_by_bibs_count(self):
+        # ASO-Dummy: Peloton mit size=999, aber nur 158 echte Bibs.
+        # Code muss 999 durch echte Anzahl ersetzen.
+        data = {"groups": [{
+            "order": 0, "name": "Peloton", "size": 999,
+            "bibs": [{"bib": i} for i in range(1, 159)],  # 158 echte Bibs
+        }]}
+        out = st.parse_groups(data)
+        assert out[0].size == 158  # nicht 999
+
+    def test_size_999_without_bibs_kept(self):
+        # Wenn keine echten Bibs da sind, behalten wir size (auch 999),
+        # weil wir keine bessere Info haben.
+        data = {"groups": [{
+            "order": 0, "name": "Peloton", "size": 999, "bibs": [],
+        }]}
+        out = st.parse_groups(data)
+        assert out[0].size == 999
+
+    def test_size_mismatch_small_group_corrected(self):
+        # size=100 aber nur 3 Bibs (ungleichgewichtig >50): nimm 3.
+        data = {"groups": [{
+            "order": 0, "name": "X", "size": 100,
+            "bibs": [{"bib": 1}, {"bib": 2}, {"bib": 3}],
+        }]}
+        out = st.parse_groups(data)
+        assert out[0].size == 3
 
     def test_gps_position_extracted(self):
         data = {"groups": [{
@@ -259,6 +287,46 @@ class TestState:
         st.apply_telemetry(s, snap, from_bootstrap=True)
         assert s.telemetry.race_status is True
         assert s.telemetry.bootstrapped is True
+
+    def test_apply_telemetry_derives_withdrawals_from_starter_diff(self):
+        # 20 Starter, 19 in Telemetrie -> 1 DNF abgeleitet.
+        s = make_state()
+        s.meta = {i: {} for i in range(1, 21)}  # 20 Starter
+        snap = {"RaceStatus": True, "TimeStamp": 1234567890,
+                "Riders": [{"Bib": i} for i in range(1, 20)]}  # 19 Rider
+        st.apply_telemetry(s, snap)
+        # Bib 20 fehlt in Telemetrie -> DNF
+        assert 20 in s.withdrawals
+        assert 1 not in s.withdrawals
+
+    def test_apply_telemetry_no_dnf_when_telemetry_small(self):
+        # Bei sehr kleiner Telemetrie (<10 Rider) nicht ableiten, weil
+        # das auf Telemetrie-Lücken statt echte DNFs hindeutet.
+        s = make_state()
+        s.meta = {i: {} for i in range(1, 21)}  # 20 Starter
+        snap = {"RaceStatus": True, "TimeStamp": 1, "Riders": [{"Bib": 1}]}
+        st.apply_telemetry(s, snap)
+        assert s.withdrawals == set()
+
+    def test_apply_telemetry_no_dnf_if_too_many_missing(self):
+        # Wenn >30% der Starter fehlen, ist die Telemetrie wahrscheinlich
+        # kaputt, nicht alle Rider haben aufgegeben.
+        s = make_state()
+        s.meta = {i: {} for i in range(1, 21)}  # 20 Starter
+        snap = {"RaceStatus": True, "TimeStamp": 1,
+                "Riders": [{"Bib": i} for i in range(1, 11)]}  # nur 10 von 20
+        st.apply_telemetry(s, snap)
+        # 10 fehlen (50%) -> keine DNF-Ableitung
+        assert s.withdrawals == set()
+
+    def test_apply_telemetry_no_dnf_without_meta(self):
+        # Ohne Starterfeld kann nicht ableiten werden.
+        s = make_state()
+        s.meta = {}
+        snap = {"RaceStatus": True, "TimeStamp": 1,
+                "Riders": [{"Bib": 1}, {"Bib": 2}]}
+        st.apply_telemetry(s, snap)
+        assert s.withdrawals == set()
 
 
 # --------------------------------------------------------------------------- #
